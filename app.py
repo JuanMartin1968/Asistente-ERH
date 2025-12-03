@@ -60,48 +60,29 @@ def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso):
     except Exception as e:
         return False, str(e)
 
-# --- 4. FUNCIÓN ROBUSTA ANTI-ERROR 404 ---
-# Esta función prueba múltiples modelos si uno falla
-def llamar_gemini_seguro(prompt_texto, api_key):
-    # Lista de modelos a probar en orden de preferencia
-    modelos = [
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-pro",
-        "gemini-1.0-pro",
-        "gemini-pro"
-    ]
-    
-    ultimo_error = ""
-    
-    for modelo in modelos:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent?key={api_key}"
-            headers = {'Content-Type': 'application/json'}
-            data = { "contents": [{"parts": [{"text": prompt_texto}]}] }
-            
-            response = requests.post(url, headers=headers, data=json.dumps(data))
-            
-            if response.status_code == 200:
-                # Si funciona, devolvemos el texto y salimos del bucle
-                return response.json()['candidates'][0]['content']['parts'][0]['text']
-            else:
-                ultimo_error = f"{modelo} dio error {response.status_code}"
-                continue # Si falla, intenta el siguiente modelo de la lista
-        except Exception as e:
-            ultimo_error = str(e)
-            continue
-            
-    # Si llega aquí, fallaron todos
-    return f"Error de conexión: {ultimo_error}"
-
-# --- 5. INICIALIZACIÓN ---
+# --- 4. CEREBRO Y AUTODETECCIÓN (LO QUE FUNCIONA) ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"].strip()
 except:
     st.error("Falta API Key")
     st.stop()
 
+@st.cache_data
+def obtener_mejor_modelo(key):
+    # Pregunta a Google qué modelo tienes disponible para evitar el 404
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            modelos = [m['name'] for m in data.get('models', []) if 'generateContent' in m.get('supportedGenerationMethods', [])]
+            if modelos: return modelos[0]
+    except: pass
+    return "models/gemini-1.5-flash"
+
+modelo_actual = obtener_mejor_modelo(api_key)
+
+# --- 5. INICIALIZACIÓN ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
     creds = obtener_credenciales()
@@ -132,7 +113,6 @@ for message in st.session_state.messages:
 
 # --- 7. PROCESAMIENTO ---
 if prompt := st.chat_input("Escribe aquí..."):
-    # Guardar usuario
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar="👤"):
         st.markdown(prompt)
@@ -161,13 +141,16 @@ if prompt := st.chat_input("Escribe aquí..."):
         Usuario dice: "{prompt}"
         Responde SOLO JSON: {{"agendar": true/false, "titulo": "...", "inicio": "YYYY-MM-DDTHH:MM:SS", "fin": "YYYY-MM-DDTHH:MM:SS"}}
         """
-        # Usamos la función segura que prueba varios modelos
-        texto_analisis = llamar_gemini_seguro(prompt_analisis, api_key)
-        
-        if "Error" not in texto_analisis:
-            try:
-                texto_analisis = texto_analisis.replace("```json", "").replace("```", "").strip()
-                datos = json.loads(texto_analisis)
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_actual}:generateContent?key={api_key}"
+            headers = {'Content-Type': 'application/json'}
+            data = { "contents": [{"parts": [{"text": prompt_analisis}]}] }
+            resp = requests.post(url, headers=headers, data=json.dumps(data))
+            
+            if resp.status_code == 200:
+                texto_json = resp.json()['candidates'][0]['content']['parts'][0]['text']
+                texto_json = texto_json.replace("```json", "").replace("```", "").strip()
+                datos = json.loads(texto_json)
 
                 if datos.get("agendar"):
                     with st.spinner("Agendando..."):
@@ -177,7 +160,7 @@ if prompt := st.chat_input("Escribe aquí..."):
                         else:
                             respuesta_texto = f"❌ Error calendario: {info}"
                         evento_creado = True
-            except: pass
+        except: pass
 
     # B. RESPUESTA NORMAL
     if not evento_creado:
@@ -187,9 +170,19 @@ if prompt := st.chat_input("Escribe aquí..."):
         else:
             final = f"Responde como Gemini.\n\nUsuario: {prompt}"
             
-        respuesta_texto = llamar_gemini_seguro(final, api_key)
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_actual}:generateContent?key={api_key}"
+            headers = {'Content-Type': 'application/json'}
+            data = { "contents": [{"parts": [{"text": final}]}] }
+            resp = requests.post(url, headers=headers, data=json.dumps(data))
+            
+            if resp.status_code == 200:
+                respuesta_texto = resp.json()['candidates'][0]['content']['parts'][0]['text']
+            else:
+                respuesta_texto = f"Error {resp.status_code}: {resp.text}"
+        except Exception as e:
+            respuesta_texto = f"Error: {e}"
 
-    # Mostrar y Guardar
     with st.chat_message("assistant", avatar=avatar_bot):
         st.markdown(respuesta_texto)
         st.session_state.messages.append({"role": "model", "content": respuesta_texto, "mode": tag_modo})
