@@ -9,13 +9,13 @@ st.markdown("""
 <style>
     /* --- ÁREA PRINCIPAL (DERECHA) - MORADO CÁLIDO --- */
     .stApp {
-        background-color: #3A1C4A; /* Morado cálido profundo */
+        background-color: #dac7ed; /* Morado cálido profundo */
         color: #ECDAEF; /* Texto claro y cálido */
     }
 
     /* --- BARRA LATERAL (IZQUIERDA) - OSCURO --- */
     [data-testid="stSidebar"] {
-        background-color: #1a0b2e; /* El tono oscuro original */
+        background-color: #5D3A68; /* El tono oscuro original */
         border-right: 1px solid rgba(255,255,255,0.1); /* Separador sutil */
     }
     /* Texto sutil en sidebar */
@@ -143,3 +143,4 @@ if api_key:
                 message_placeholder.error(f"Error de conexión: {e}")
 else:
     st.info("👈 Esperando configuración de API Key en la barra lateral.")
+
