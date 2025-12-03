@@ -5,16 +5,15 @@ import json
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Asistente Personal", page_icon="🟣", layout="wide")
 
-# --- DISEÑO EXACTO (TU PEDIDO) ---
+# --- DISEÑO EXACTO (TU PEDIDO: DERECHA CLARA / IZQUIERDA OSCURA) ---
 st.markdown("""
 <style>
-    /* 1. LADO DERECHO: Fondo blanco/lila pálido, letras NEGRAS */
+    /* 1. LADO DERECHO: Fondo claro, letras NEGRAS */
     .stApp {
         background-color: #FAF5FF !important;
         color: #000000 !important;
     }
-    /* Forzar texto negro */
-    .stMarkdown p, h1, h2, h3, div, span {
+    .stMarkdown p, h1, h2, h3, div, span, li {
         color: #000000 !important;
     }
 
@@ -26,7 +25,7 @@ st.markdown("""
         color: #FFFFFF !important;
     }
 
-    /* 3. INPUTS Y BOTONES */
+    /* 3. INPUTS */
     .stTextInput > div > div > input {
         background-color: #FFFFFF !important;
         color: #000000 !important;
@@ -38,7 +37,7 @@ st.markdown("""
         border: none !important;
     }
     
-    /* Burbujas chat: Fondo blanco, texto negro */
+    /* 4. BURBUJAS */
     .stChatMessage {
         background-color: #FFFFFF !important;
         border: 1px solid #E1BEE7 !important;
@@ -73,7 +72,6 @@ for message in st.session_state.messages:
 
 # --- CONEXIÓN DIRECTA ---
 if prompt := st.chat_input("Escribe aquí..."):
-    # Guardar usuario
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar="👤"):
         st.markdown(prompt)
@@ -92,7 +90,7 @@ if prompt := st.chat_input("Escribe aquí..."):
         placeholder.markdown("...")
         
         try:
-            # URL ESTÁNDAR (Funcionará con la nueva llave)
+            # URL DEL MODELO
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
             headers = {'Content-Type': 'application/json'}
             data = { "contents": [{"parts": [{"text": final_prompt}]}] }
@@ -104,6 +102,9 @@ if prompt := st.chat_input("Escribe aquí..."):
                 placeholder.markdown(texto)
                 st.session_state.messages.append({"role": "model", "content": texto, "mode": tag_modo})
             else:
-                placeholder.error(f"Error {response.status_code}: Tu llave nueva no tiene permisos.")
+                # AQUÍ ESTÁ EL CAMBIO: Muestra el mensaje REAL de Google
+                error_msg = response.text
+                placeholder.error(f"Error {response.status_code} de Google: {error_msg}")
+                st.error("👇 Pista: Si dice 'API not enabled', copia el enlace que sale ahí y pégalo en tu navegador.")
         except Exception as e:
             placeholder.error(f"Error de conexión: {e}")
