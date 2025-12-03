@@ -28,7 +28,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. CONEXIÓN SEGURA ---
+# --- 3. HORA PERÚ (CORRECCIÓN UTC-5) ---
+def obtener_hora_peru():
+    # El servidor es UTC, restamos 5 horas para Lima
+    return datetime.datetime.utcnow() - datetime.timedelta(hours=5)
+
+# --- 4. CONEXIONES ---
 def obtener_credenciales():
     try:
         json_text = st.secrets["GOOGLE_CREDENTIALS"]
@@ -47,19 +52,15 @@ def conectar_memoria(creds):
         return client.open("Memoria_Asistente").sheet1
     except: return None
 
-# MODIFICACIÓN: Agrega notificaciones forzadas (Popup)
 def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso, minutos_alerta=10):
     try:
         service = build('calendar', 'v3', credentials=creds)
-        
-        # Si minutos_alerta > 0, forzamos que el celular suene
         reminders = {'useDefault': True}
         if minutos_alerta > 0:
             reminders = {
                 'useDefault': False,
                 'overrides': [{'method': 'popup', 'minutes': minutos_alerta}],
             }
-
         evento = {
             'summary': resumen,
             'start': {'dateTime': inicio_iso, 'timeZone': 'America/Lima'}, 
@@ -71,7 +72,7 @@ def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso, minutos_alerta=
     except Exception as e:
         return False, str(e)
 
-# --- 4. CEREBRO: AUTODETECCIÓN ---
+# --- 5. CEREBRO ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"].strip()
 except:
@@ -93,7 +94,7 @@ def detectar_modelo_real(key):
 
 modelo_activo = detectar_modelo_real(api_key)
 
-# --- 5. INICIALIZACIÓN ---
+# --- 6. INICIALIZACIÓN ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -117,7 +118,7 @@ if creds:
                         st.session_state.messages.append({"role": role, "content": msg, "mode": "personal"})
             except: pass
 
-# --- 6. BARRA LATERAL ---
+# --- 7. BARRA LATERAL ---
 with st.sidebar:
     st.header("Configuración")
     modo = st.radio("Modo:", ["🟣 Asistente Personal", "✨ Gemini General"])
@@ -127,7 +128,7 @@ with st.sidebar:
     else:
         st.error("⚠️ Memoria Desconectada")
 
-# --- 7. CHAT UI ---
+# --- 8. CHAT UI ---
 st.title("Tu Espacio")
 
 for message in st.session_state.messages:
@@ -136,7 +137,7 @@ for message in st.session_state.messages:
     with st.chat_message(role, avatar=avatar):
         st.markdown(message["content"])
 
-# --- 8. PROCESAMIENTO ---
+# --- 9. PROCESAMIENTO ---
 if prompt := st.chat_input("Escribe aquí..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar="👤"):
@@ -144,7 +145,8 @@ if prompt := st.chat_input("Escribe aquí..."):
 
     if hoja:
         try:
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # Usamos hora Perú para el registro en Sheets
+            timestamp = obtener_hora_peru().strftime("%Y-%m-%d %H:%M:%S")
             hoja.append_row([timestamp, "user", prompt])
         except: pass
 
@@ -155,18 +157,17 @@ if prompt := st.chat_input("Escribe aquí..."):
     respuesta_texto = ""
     evento_creado = False
 
-    # A. INTENTO DE AGENDAR (CON ALERTAS)
+    # A. INTENTO DE AGENDAR
     if es_personal:
+        # Le pasamos la hora de Perú al prompt para que calcule bien "mañana" o "en 5 minutos"
+        ahora_peru = obtener_hora_peru().isoformat()
+        
         prompt_analisis = f"""
-        Fecha actual: {datetime.datetime.now().isoformat()}
+        Fecha/Hora actual en Perú: {ahora_peru}
         Usuario dice: "{prompt}"
         
-        Analiza si quiere agendar.
-        Si menciona alerta (ej: "avísame 10 min antes"), pon los minutos en "alerta_minutos".
-        Si no dice nada de alerta, pon 10.
-        
         Responde SOLO JSON: 
-        {{"agendar": true/false, "titulo": "...", "inicio": "YYYY-MM-DDTHH:MM:SS", "fin": "YYYY-MM-DDTHH:MM:SS", "alerta_minutos": 10}}
+        {{"agendar": true/false, "titulo": "...", "inicio": "ISO", "fin": "ISO", "alerta_minutos": 10}}
         """
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_activo}:generateContent?key={api_key}"
@@ -190,22 +191,22 @@ if prompt := st.chat_input("Escribe aquí..."):
                         evento_creado = True
         except: pass
 
-    # B. RESPUESTA NORMAL (CON RELOJ Y MEMORIA)
+    # B. RESPUESTA NORMAL
     if not evento_creado:
         historial = ""
         for m in st.session_state.messages[-40:]:
             historial += f"{m['role']}: {m['content']}\n"
         
-        # AQUÍ ESTÁ EL ARREGLO DEL TIEMPO:
-        fecha_actual = datetime.datetime.now().strftime("%A %d de %B del %Y, %H:%M")
+        # Le damos la hora real formateada para que pueda responder "¿Qué hora es?"
+        fecha_humana = obtener_hora_peru().strftime("%A %d de %B del %Y, %H:%M")
         
         if es_personal:
             final = f"""
             INSTRUCCIONES: Eres un asistente personal leal. Tienes memoria.
             NO digas que eres un modelo de lenguaje.
             
-            DATOS DE TIEMPO REAL:
-            Hoy es: {fecha_actual}
+            DATOS TIEMPO REAL (LIMA, PERÚ):
+            {fecha_humana}
             
             MEMORIA:
             {historial}
@@ -233,6 +234,6 @@ if prompt := st.chat_input("Escribe aquí..."):
         st.session_state.messages.append({"role": "model", "content": respuesta_texto, "mode": tag_modo})
         if hoja:
             try:
-                timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                timestamp = obtener_hora_peru().strftime("%Y-%m-%d %H:%M:%S")
                 hoja.append_row([timestamp, "assistant", respuesta_texto])
             except: pass
