@@ -2,3 +2,4 @@ streamlit
 requests
 gspread
 oauth2client
+google-api-python-client
