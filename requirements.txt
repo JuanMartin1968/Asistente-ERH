@@ -1,5 +1,6 @@
-streamlit
+streamlit>=1.40.0
 requests
 gspread
 oauth2client
 google-api-python-client
+gTTS
