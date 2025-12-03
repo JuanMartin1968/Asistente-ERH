@@ -28,22 +28,20 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 1. CONEXIÓN A MEMORIA (NUEVO MÉTODO) ---
+# --- 1. CONEXIÓN A MEMORIA (VERSIÓN TOLERANTE A ERRORES) ---
 def conectar_memoria():
     try:
-        # AQUI ESTA LA CLAVE: Leemos el bloque de texto que pegaste
         json_text = st.secrets["GOOGLE_CREDENTIALS"]
-        creds_dict = json.loads(json_text)
+        # AQUÍ ESTÁ EL ARREGLO: strict=False perdona los errores de formato
+        creds_dict = json.loads(json_text, strict=False)
         
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
         
-        # IMPORTANTE: El nombre de la hoja debe ser EXACTO
         sheet = client.open("Memoria_Asistente").sheet1
         return sheet
     except Exception as e:
-        # Si falla, guardamos el error exacto para mostrártelo
         st.session_state.error_memoria = str(e)
         return None
 
@@ -75,7 +73,6 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
     st.session_state.error_memoria = None
     
-    # Cargar historial
     hoja = conectar_memoria()
     if hoja:
         try:
@@ -97,9 +94,8 @@ with st.sidebar:
     modo = st.radio("Modo:", ["🟣 Asistente Personal", "✨ Gemini General"])
     
     st.write("---")
-    # Diagnóstico
     if st.session_state.get("error_memoria"):
-        st.error(f"❌ Error: {st.session_state.error_memoria}")
+        st.error(f"Error Memoria: {st.session_state.error_memoria}")
     else:
         st.success("🧠 Memoria Conectada")
 
@@ -131,7 +127,10 @@ if prompt := st.chat_input("Escribe aquí..."):
     tag_modo = "personal" if es_personal else "gemini"
     avatar_bot = "🟣" if es_personal else "✨"
     
-    texto_final = f"Eres un asistente personal útil. Usuario: {prompt}" if es_personal else f"Responde como Gemini. Usuario: {prompt}"
+    if es_personal:
+        texto_final = f"Eres un asistente personal útil y directo. Tu estética es morada.\n\nUsuario: {prompt}"
+    else:
+        texto_final = f"Responde como Gemini.\n\nUsuario: {prompt}"
 
     with st.chat_message("assistant", avatar=avatar_bot):
         placeholder = st.empty()
