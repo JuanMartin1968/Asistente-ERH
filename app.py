@@ -6,7 +6,7 @@ import datetime
 from oauth2client.service_account import ServiceAccountCredentials
 from googleapiclient.discovery import build
 
-# --- 1. DATOS DE USUARIO ---
+# --- 1. DATOS DEL USUARIO ---
 TU_EMAIL_GMAIL = "juanjesusmartinsr@gmail.com"
 
 # --- 2. CONFIGURACIÓN VISUAL ---
@@ -28,7 +28,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. FUNCIONES DE CONEXIÓN ---
+# --- 3. CONEXIÓN SEGURA ---
 def obtener_credenciales():
     try:
         json_text = st.secrets["GOOGLE_CREDENTIALS"]
@@ -47,27 +47,37 @@ def conectar_memoria(creds):
         return client.open("Memoria_Asistente").sheet1
     except: return None
 
-def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso):
+# MODIFICACIÓN: Agrega notificaciones forzadas (Popup)
+def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso, minutos_alerta=10):
     try:
         service = build('calendar', 'v3', credentials=creds)
+        
+        # Si minutos_alerta > 0, forzamos que el celular suene
+        reminders = {'useDefault': True}
+        if minutos_alerta > 0:
+            reminders = {
+                'useDefault': False,
+                'overrides': [{'method': 'popup', 'minutes': minutos_alerta}],
+            }
+
         evento = {
             'summary': resumen,
             'start': {'dateTime': inicio_iso, 'timeZone': 'America/Lima'}, 
             'end': {'dateTime': fin_iso, 'timeZone': 'America/Lima'},
+            'reminders': reminders
         }
         service.events().insert(calendarId=TU_EMAIL_GMAIL, body=evento).execute()
         return True, "Agendado"
     except Exception as e:
         return False, str(e)
 
-# --- 4. CEREBRO: AUTODETECCIÓN (SOLUCIÓN AL 404) ---
+# --- 4. CEREBRO: AUTODETECCIÓN ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"].strip()
 except:
     st.error("Falta API Key")
     st.stop()
 
-# Esta función pregunta a Google qué modelo tienes y usa ESE EXACTAMENTE
 @st.cache_data
 def detectar_modelo_real(key):
     try:
@@ -75,13 +85,10 @@ def detectar_modelo_real(key):
         response = requests.get(url)
         if response.status_code == 200:
             data = response.json()
-            # Buscamos el primer modelo que sirva para generar texto
             for m in data.get('models', []):
                 if 'generateContent' in m.get('supportedGenerationMethods', []):
-                    # Retorna el nombre técnico exacto (ej: models/gemini-1.5-flash-001)
                     return m['name'] 
     except: pass
-    # Si falla la detección, usamos el genérico
     return "models/gemini-1.5-flash"
 
 modelo_activo = detectar_modelo_real(api_key)
@@ -102,7 +109,6 @@ if creds:
             try:
                 registros = hoja.get_all_records()
                 for r in registros:
-                    # Leemos tolerando mayúsculas/minúsculas
                     r_low = {k.lower(): v for k, v in r.items()}
                     msg = str(r_low.get("mensaje", "")).strip()
                     if msg:
@@ -120,9 +126,6 @@ with st.sidebar:
         st.success("🧠 Memoria Conectada")
     else:
         st.error("⚠️ Memoria Desconectada")
-    
-    # Debug opcional para que sepas qué modelo detectó (puedes borrar esta línea luego)
-    # st.caption(f"Modelo: {modelo_activo}")
 
 # --- 7. CHAT UI ---
 st.title("Tu Espacio")
@@ -152,15 +155,20 @@ if prompt := st.chat_input("Escribe aquí..."):
     respuesta_texto = ""
     evento_creado = False
 
-    # A. INTENTO DE AGENDAR
+    # A. INTENTO DE AGENDAR (CON ALERTAS)
     if es_personal:
         prompt_analisis = f"""
         Fecha actual: {datetime.datetime.now().isoformat()}
         Usuario dice: "{prompt}"
-        Responde SOLO JSON: {{"agendar": true/false, "titulo": "...", "inicio": "YYYY-MM-DDTHH:MM:SS", "fin": "YYYY-MM-DDTHH:MM:SS"}}
+        
+        Analiza si quiere agendar.
+        Si menciona alerta (ej: "avísame 10 min antes"), pon los minutos en "alerta_minutos".
+        Si no dice nada de alerta, pon 10.
+        
+        Responde SOLO JSON: 
+        {{"agendar": true/false, "titulo": "...", "inicio": "YYYY-MM-DDTHH:MM:SS", "fin": "YYYY-MM-DDTHH:MM:SS", "alerta_minutos": 10}}
         """
         try:
-            # Usamos el modelo detectado
             url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_activo}:generateContent?key={api_key}"
             headers = {'Content-Type': 'application/json'}
             data = { "contents": [{"parts": [{"text": prompt_analisis}]}] }
@@ -173,25 +181,31 @@ if prompt := st.chat_input("Escribe aquí..."):
 
                 if datos.get("agendar"):
                     with st.spinner("Agendando..."):
-                        exito, info = crear_evento_calendario(creds, datos["titulo"], datos["inicio"], datos["fin"])
+                        minutos = int(datos.get("alerta_minutos", 10))
+                        exito, info = crear_evento_calendario(creds, datos["titulo"], datos["inicio"], datos["fin"], minutos)
                         if exito:
-                            respuesta_texto = f"✅ Agendado: **{datos['titulo']}**"
+                            respuesta_texto = f"✅ Agendado: **{datos['titulo']}** (Alerta: {minutos} min antes)"
                         else:
                             respuesta_texto = f"❌ Error calendario: {info}"
                         evento_creado = True
         except: pass
 
-    # B. RESPUESTA NORMAL
+    # B. RESPUESTA NORMAL (CON RELOJ Y MEMORIA)
     if not evento_creado:
-        # Contexto: 40 últimos mensajes
         historial = ""
         for m in st.session_state.messages[-40:]:
             historial += f"{m['role']}: {m['content']}\n"
+        
+        # AQUÍ ESTÁ EL ARREGLO DEL TIEMPO:
+        fecha_actual = datetime.datetime.now().strftime("%A %d de %B del %Y, %H:%M")
         
         if es_personal:
             final = f"""
             INSTRUCCIONES: Eres un asistente personal leal. Tienes memoria.
             NO digas que eres un modelo de lenguaje.
+            
+            DATOS DE TIEMPO REAL:
+            Hoy es: {fecha_actual}
             
             MEMORIA:
             {historial}
@@ -202,7 +216,6 @@ if prompt := st.chat_input("Escribe aquí..."):
             final = f"Responde como Gemini.\n\nUsuario: {prompt}"
             
         try:
-            # Usamos el modelo detectado
             url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_activo}:generateContent?key={api_key}"
             headers = {'Content-Type': 'application/json'}
             data = { "contents": [{"parts": [{"text": final}]}] }
