@@ -6,7 +6,7 @@ import datetime
 from oauth2client.service_account import ServiceAccountCredentials
 from googleapiclient.discovery import build
 
-# --- 1. DATOS DEL USUARIO ---
+# --- 1. DATOS DE USUARIO ---
 TU_EMAIL_GMAIL = "juanjesusmartinsr@gmail.com"
 
 # --- 2. CONFIGURACIÓN VISUAL ---
@@ -14,20 +14,21 @@ st.set_page_config(page_title="Asistente Personal", page_icon="🟣", layout="wi
 
 st.markdown("""
 <style>
-    /* DERECHA (Claro) */
+    /* DERECHA */
     .stApp { background-color: #FAF5FF !important; color: #000000 !important; }
     .stMarkdown p, h1, h2, h3, div, span, li, label { color: #000000 !important; }
-    /* IZQUIERDA (Oscuro) */
+    /* IZQUIERDA */
     [data-testid="stSidebar"] { background-color: #1a0b2e !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
-    /* INPUTS Y CHAT */
+    /* INPUTS */
     .stTextInput > div > div > input { background-color: #FFFFFF !important; color: #000000 !important; border: 1px solid #D1C4E9 !important; }
     .stButton > button { background-color: #6A1B9A !important; color: white !important; border: none !important; }
+    /* CHAT */
     .stChatMessage { background-color: #FFFFFF !important; border: 1px solid #E1BEE7 !important; color: #000000 !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. CONEXIÓN SEGURA (CALENDARIO Y MEMORIA) ---
+# --- 3. FUNCIONES DE CONEXIÓN ---
 def obtener_credenciales():
     try:
         json_text = st.secrets["GOOGLE_CREDENTIALS"]
@@ -43,7 +44,6 @@ def obtener_credenciales():
 def conectar_memoria(creds):
     try:
         client = gspread.authorize(creds)
-        # Abre la primera hoja que encuentre
         return client.open("Memoria_Asistente").sheet1
     except: return None
 
@@ -60,46 +60,36 @@ def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso):
     except Exception as e:
         return False, str(e)
 
-# --- 4. FUNCIÓN MULTI-MODELO (ANTI ERROR 404) ---
-def consultar_gemini(prompt_texto, api_key):
-    # Lista de modelos para probar en orden (si uno falla, salta al siguiente)
-    modelos = [
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-pro",
-        "gemini-1.0-pro",
-        "gemini-pro"
-    ]
-    
-    ultimo_error = ""
-    for modelo in modelos:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent?key={api_key}"
-            headers = {'Content-Type': 'application/json'}
-            data = { "contents": [{"parts": [{"text": prompt_texto}]}] }
-            
-            response = requests.post(url, headers=headers, data=json.dumps(data))
-            
-            if response.status_code == 200:
-                return response.json()['candidates'][0]['content']['parts'][0]['text']
-            else:
-                ultimo_error = f"{response.status_code}"
-                continue
-        except: continue
-            
-    return f"Error de conexión con Google ({ultimo_error}). Verifica tu API Key."
-
-# --- 5. INICIALIZACIÓN ---
+# --- 4. CEREBRO: AUTODETECCIÓN (SOLUCIÓN AL 404) ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"].strip()
 except:
     st.error("Falta API Key")
     st.stop()
 
+# Esta función pregunta a Google qué modelo tienes y usa ESE EXACTAMENTE
+@st.cache_data
+def detectar_modelo_real(key):
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            # Buscamos el primer modelo que sirva para generar texto
+            for m in data.get('models', []):
+                if 'generateContent' in m.get('supportedGenerationMethods', []):
+                    # Retorna el nombre técnico exacto (ej: models/gemini-1.5-flash-001)
+                    return m['name'] 
+    except: pass
+    # Si falla la detección, usamos el genérico
+    return "models/gemini-1.5-flash"
+
+modelo_activo = detectar_modelo_real(api_key)
+
+# --- 5. INICIALIZACIÓN ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Carga de memoria robusta (Insensible a mayúsculas)
 creds = obtener_credenciales()
 hoja = None
 estado_memoria = "Desconectada"
@@ -112,13 +102,12 @@ if creds:
             try:
                 registros = hoja.get_all_records()
                 for r in registros:
-                    # Normalizamos las llaves a minúsculas para evitar errores de "Mensaje" vs "mensaje"
-                    r_lower = {k.lower(): v for k, v in r.items()}
-                    msg = str(r_lower.get("mensaje", "")).strip()
+                    # Leemos tolerando mayúsculas/minúsculas
+                    r_low = {k.lower(): v for k, v in r.items()}
+                    msg = str(r_low.get("mensaje", "")).strip()
                     if msg:
-                        rol_origen = r_lower.get("rol", "model")
-                        # Normalizamos rol
-                        role = "user" if rol_origen.lower() == "user" else "model"
+                        rol_orig = r_low.get("rol", "model").lower()
+                        role = "user" if rol_orig == "user" else "model"
                         st.session_state.messages.append({"role": role, "content": msg, "mode": "personal"})
             except: pass
 
@@ -131,6 +120,9 @@ with st.sidebar:
         st.success("🧠 Memoria Conectada")
     else:
         st.error("⚠️ Memoria Desconectada")
+    
+    # Debug opcional para que sepas qué modelo detectó (puedes borrar esta línea luego)
+    # st.caption(f"Modelo: {modelo_activo}")
 
 # --- 7. CHAT UI ---
 st.title("Tu Espacio")
@@ -141,14 +133,12 @@ for message in st.session_state.messages:
     with st.chat_message(role, avatar=avatar):
         st.markdown(message["content"])
 
-# --- 8. LÓGICA DE RESPUESTA ---
+# --- 8. PROCESAMIENTO ---
 if prompt := st.chat_input("Escribe aquí..."):
-    # Guardar usuario
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar="👤"):
         st.markdown(prompt)
 
-    # Guardar en Sheet
     if hoja:
         try:
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -162,19 +152,24 @@ if prompt := st.chat_input("Escribe aquí..."):
     respuesta_texto = ""
     evento_creado = False
 
-    # A. AGENDA (Solo modo personal)
+    # A. INTENTO DE AGENDAR
     if es_personal:
         prompt_analisis = f"""
         Fecha actual: {datetime.datetime.now().isoformat()}
         Usuario dice: "{prompt}"
         Responde SOLO JSON: {{"agendar": true/false, "titulo": "...", "inicio": "YYYY-MM-DDTHH:MM:SS", "fin": "YYYY-MM-DDTHH:MM:SS"}}
         """
-        texto_analisis = consultar_gemini(prompt_analisis, api_key)
-        
-        if "Error" not in texto_analisis:
-            try:
-                texto_analisis = texto_analisis.replace("```json", "").replace("```", "").strip()
-                datos = json.loads(texto_analisis)
+        try:
+            # Usamos el modelo detectado
+            url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_activo}:generateContent?key={api_key}"
+            headers = {'Content-Type': 'application/json'}
+            data = { "contents": [{"parts": [{"text": prompt_analisis}]}] }
+            resp = requests.post(url, headers=headers, data=json.dumps(data))
+            
+            if resp.status_code == 200:
+                texto_json = resp.json()['candidates'][0]['content']['parts'][0]['text']
+                texto_json = texto_json.replace("```json", "").replace("```", "").strip()
+                datos = json.loads(texto_json)
 
                 if datos.get("agendar"):
                     with st.spinner("Agendando..."):
@@ -184,32 +179,42 @@ if prompt := st.chat_input("Escribe aquí..."):
                         else:
                             respuesta_texto = f"❌ Error calendario: {info}"
                         evento_creado = True
-            except: pass
+        except: pass
 
-    # B. RESPUESTA NORMAL (Con Memoria Completa)
+    # B. RESPUESTA NORMAL
     if not evento_creado:
-        # Construimos el historial completo como texto para enviarlo al modelo
-        historial_texto = ""
-        # Tomamos hasta los últimos 50 mensajes para asegurar contexto
-        for m in st.session_state.messages[-50:]:
-            historial_texto += f"{m['role']}: {m['content']}\n"
-
+        # Contexto: 40 últimos mensajes
+        historial = ""
+        for m in st.session_state.messages[-40:]:
+            historial += f"{m['role']}: {m['content']}\n"
+        
         if es_personal:
             final = f"""
-            INSTRUCCIONES: Eres un asistente personal leal. Tienes memoria de largo plazo.
-            NO digas que eres un modelo de lenguaje. Usa el historial para conocer al usuario.
+            INSTRUCCIONES: Eres un asistente personal leal. Tienes memoria.
+            NO digas que eres un modelo de lenguaje.
             
-            HISTORIAL DE CONVERSACIÓN (MEMORIA):
-            {historial_texto}
+            MEMORIA:
+            {historial}
             
-            USUARIO AHORA: {prompt}
+            USUARIO: {prompt}
             """
         else:
             final = f"Responde como Gemini.\n\nUsuario: {prompt}"
             
-        respuesta_texto = consultar_gemini(final, api_key)
+        try:
+            # Usamos el modelo detectado
+            url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_activo}:generateContent?key={api_key}"
+            headers = {'Content-Type': 'application/json'}
+            data = { "contents": [{"parts": [{"text": final}]}] }
+            resp = requests.post(url, headers=headers, data=json.dumps(data))
+            
+            if resp.status_code == 200:
+                respuesta_texto = resp.json()['candidates'][0]['content']['parts'][0]['text']
+            else:
+                respuesta_texto = f"Error {resp.status_code}: {resp.text}"
+        except Exception as e:
+            respuesta_texto = f"Error: {e}"
 
-    # Mostrar y Guardar
     with st.chat_message("assistant", avatar=avatar_bot):
         st.markdown(respuesta_texto)
         st.session_state.messages.append({"role": "model", "content": respuesta_texto, "mode": tag_modo})
