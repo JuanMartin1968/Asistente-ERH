@@ -1,117 +1,145 @@
 import streamlit as st
 import google.generativeai as genai
 
-# --- CONFIGURACIÓN DE PÁGINA Y DISEÑO MORADO ---
-st.set_page_config(page_title="Mi Asistente Personal", page_icon="💜")
+# --- CONFIGURACIÓN DE PÁGINA Y DISEÑO MINIMALISTA CÁLIDO ---
+st.set_page_config(page_title="Mi Espacio Personal", page_icon="🟣", layout="wide")
 
-# CSS personalizado para forzar el modo oscuro/morado
+# CSS PROFESIONAL Y MINIMALISTA
 st.markdown("""
 <style>
-    /* Fondo principal */
+    /* --- ÁREA PRINCIPAL (DERECHA) - MORADO CÁLIDO --- */
     .stApp {
-        background-color: #1a0b2e;
-        color: #e0d4fc;
+        background-color: #3A1C4A; /* Morado cálido profundo */
+        color: #ECDAEF; /* Texto claro y cálido */
     }
-    /* Barras laterales */
+
+    /* --- BARRA LATERAL (IZQUIERDA) - OSCURO --- */
     [data-testid="stSidebar"] {
-        background-color: #110022;
+        background-color: #1a0b2e; /* El tono oscuro original */
+        border-right: 1px solid rgba(255,255,255,0.1); /* Separador sutil */
     }
-    /* Botones y inputs */
+    /* Texto sutil en sidebar */
+    [data-testid="stSidebar"] .stMarkdown {
+        color: #BFA5CC;
+    }
+
+    /* --- ELEMENTOS DE INTERFAZ --- */
+    /* Títulos minimalistas (más finos) */
+    h1, h2, h3 {
+        color: #F3E5F5 !important;
+        font-family: sans-serif;
+        font-weight: 300 !important; /* Letra fina moderna */
+    }
+
+    /* Inputs (Cajas de texto) */
     .stTextInput > div > div > input {
-        background-color: #2d1b4e;
+        background-color: rgba(255,255,255,0.08); /* Translúcido */
         color: white;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.1);
     }
+
+    /* Botones minimalistas */
     .stButton > button {
-        background-color: #7b2cbf;
+        background-color: #9E47C1; /* Morado cálido vibrante */
         color: white;
         border: none;
-        border-radius: 10px;
+        border-radius: 20px; /* Más redondeado */
+        padding: 0.5rem 1.2rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
     }
-    /* Títulos */
-    h1, h2, h3 {
-        color: #9d4edd !important;
+    .stButton > button:hover {
+        background-color: #B96BD6; /* Más brillante al tocar */
+        box-shadow: 0 4px 12px rgba(158, 71, 193, 0.3);
+    }
+    
+    /* Radio Buttons (Selector de modo) */
+    [data-testid="stRadio"] label {
+        font-weight: 500;
+        color: #ECDAEF !important;
+    }
+
+    /* Burbujas de chat */
+    .stChatMessage {
+        background-color: rgba(255, 255, 255, 0.03);
+        border-radius: 16px;
+        padding: 15px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- MENÚ LATERAL: EL BOTÓN DE MODO ---
+# --- AUTENTICACIÓN AUTOMÁTICA (Lee el secreto) ---
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+except:
+    api_key = None
+
+# --- MENÚ LATERAL ---
 with st.sidebar:
-    st.header("⚙️ Configuración")
-    st.write("Elige con quién quieres hablar:")
-    # Aquí está el botón dual que pediste
-    modo = st.radio(
-        "Modo de consulta:",
-        ["💜 Mi Asistente (Aprende de mí)", "✨ Gemini (Consulta General)"]
-    )
+    st.title("⚙️ Panel")
+    st.write("---")
+    modo = st.radio("Selecciona tu modo:", ["🟣 Asistente Personal", "✨ Gemini (General)"])
+    st.write("---")
+    
+    if not api_key:
+        st.error("⚠️ No se encontró la llave en Secrets.")
+        st.info("Por favor, configúrala en el panel de Streamlit Cloud.")
 
-    # Campo para poner la clave (esto lo haremos automático después)
-    api_key = st.text_input("Pega tu API Key de Gemini aquí:", type="password")
-
-# --- LÓGICA DEL CEREBRO ---
-st.title("💜 Tu Espacio Personal")
+# --- LÓGICA PRINCIPAL ---
+st.header("Tu Espacio Creativo")
+st.caption("Conversa en un entorno cálido y minimalista.")
 
 if api_key:
-    # Conectamos con Gemini
     genai.configure(api_key=api_key)
-
-    # Inicializar el historial del chat si no existe
+    
+    # Historial
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Mostrar mensajes anteriores en pantalla
     for message in st.session_state.messages:
         role = "user" if message["role"] == "user" else "assistant"
-        avatar = "👤" if role == "user" else (
-            "💜" if message.get("mode") == "personal" else "✨")
+        # Iconos personalizados según el modo en que se generó el mensaje
+        msg_mode = message.get("mode", "gemini")
+        avatar = "👤" if role == "user" else ("🟣" if msg_mode == "personal" else "✨")
+        
         with st.chat_message(role, avatar=avatar):
             st.markdown(message["content"])
 
-    # --- CAPTURAR TU MENSAJE ---
-    if prompt := st.chat_input("Escribe aquí..."):
-        # 1. Guardar y mostrar tu mensaje
+    # Input
+    if prompt := st.chat_input("Escribe tu idea aquí..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar="👤"):
             st.markdown(prompt)
 
-        # 2. Preparar la respuesta según el botón que elegiste
-        with st.chat_message("assistant", avatar="💜" if modo == "💜 Mi Asistente (Aprende de mí)" else "✨"):
-            message_placeholder = st.empty()
+        current_mode_tag = "personal" if "Asistente" in modo else "gemini"
+        avatar_bot = "🟣" if current_mode_tag == "personal" else "✨"
 
+        with st.chat_message("assistant", avatar=avatar_bot):
+            message_placeholder = st.empty()
+            message_placeholder.markdown("Thinking...")
             try:
                 model = genai.GenerativeModel('gemini-1.5-flash')
-
-                if "Asistente" in modo:
-                    # Lógica de Personalización
-                    # Aquí le decimos que actúe como TU asistente
-                    instruccion_sistema = f"""
-                    Eres un asistente personal altamente inteligente y cariñoso.
-                    Tu diseño es de tonos morados, así que usa emojis morados (💜, 🟣, 👾) frecuentemente.
-                    Tu objetivo es aprender del usuario. Si el usuario te cuenta algo sobre su vida, guárdalo mentalmente para usarlo en el futuro.
-                    """
-                    full_prompt = f"{instruccion_sistema}\n\nUsuario dice: {prompt}"
-                    response = model.generate_content(full_prompt)
-                    bot_reply = response.text
-
-                    # (Más adelante aquí agregaremos el código para guardar en Google Sheets)
-
+                
+                if current_mode_tag == "personal":
+                    # Prompt del Asistente Cálido
+                    sys_prompt = """Eres un asistente personal avanzado, con una personalidad cálida, amable y eficiente, similar a la estética minimalista y morada de tu interfaz. 
+                    Usa emojis morados o cálidos (🟣, 👾, ✨, 💡) ocasionalmente. Tu objetivo es aprender del usuario y asistirle de forma cercana."""
+                    full_prompt = f"{sys_prompt}\n\nUsuario: {prompt}"
                 else:
-                    # Lógica de Gemini Puro
-                    full_prompt = f"Responde como una IA útil y objetiva de Google llamada Gemini.\n\nUsuario: {prompt}"
-                    response = model.generate_content(full_prompt)
-                    bot_reply = response.text
-
-                # Mostrar respuesta
+                    # Prompt de Gemini General
+                    full_prompt = f"Responde objetiva y útilmente como la IA Gemini de Google.\n\nUsuario: {prompt}"
+                
+                response = model.generate_content(full_prompt)
+                bot_reply = response.text
                 message_placeholder.markdown(bot_reply)
-
-                # Guardar en historial
+                
                 st.session_state.messages.append({
-                    "role": "model",
-                    "content": bot_reply,
-                    "mode": "personal" if "Asistente" in modo else "gemini"
+                    "role": "model", 
+                    "content": bot_reply, 
+                    "mode": current_mode_tag
                 })
-
             except Exception as e:
-                st.error(f"Error: {e}")
+                message_placeholder.error(f"Error de conexión: {e}")
 else:
-    st.warning(
-        "⚠️ Por favor, introduce tu API Key en el menú lateral para comenzar.")
+    st.info("👈 Esperando configuración de API Key en la barra lateral.")
