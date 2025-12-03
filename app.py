@@ -1,112 +1,122 @@
 import streamlit as st
 import google.generativeai as genai
 
-# --- CONFIGURACIÓN GENERAL ---
-st.set_page_config(page_title="Mi Asistente", page_icon="🟣", layout="wide")
+# Configuración básica
+st.set_page_config(page_title="Asistente Personal", page_icon="🟣", layout="wide")
 
-# --- DISEÑO DE COLORES (TUS PREFERENCIAS) ---
+# --- DISEÑO EXACTO SEGÚN TUS INSTRUCCIONES ---
 st.markdown("""
 <style>
-    /* 1. LADO DERECHO (Área Principal) - Morado Cálido Minimalista */
+    /* 1. LADO DERECHO (Área Principal) */
+    /* Fondo: Morado súper bajo (casi blanco) */
     .stApp {
-        background-color: #4A2C5A; /* Un morado cálido, tipo ciruela suave */
-        color: #F3E5F5;             /* Texto lila muy claro para contraste */
+        background-color: #F8F0FC; 
+        color: #000000; /* Letras Negras */
     }
 
-    /* 2. LADO IZQUIERDO (Menú) - El color oscuro que te gustaba */
+    /* 2. LADO IZQUIERDO (Barra Lateral) */
+    /* Fondo: Oscuro (el que te gustaba antes) */
     [data-testid="stSidebar"] {
-        background-color: #1a0b2e; /* Morado casi negro (el que estaba antes a la derecha) */
-        border-right: 1px solid rgba(255,255,255,0.1);
+        background-color: #1a0b2e;
+    }
+    /* Letras del lado izquierdo: Blancas */
+    [data-testid="stSidebar"] * {
+        color: #FFFFFF !important;
     }
 
-    /* 3. BOTONES Y DETALLES */
-    .stButton > button {
-        background-color: #8E44AD; /* Un lila vibrante para destacar */
-        color: white;
-        border-radius: 20px;
-        border: none;
+    /* 3. CAJAS DE TEXTO Y BOTONES */
+    /* Input del usuario (Fondo blanco para que resalte en el fondo claro, letras negras) */
+    .stTextInput > div > div > input {
+        background-color: #FFFFFF;
+        color: #000000;
+        border: 1px solid #D1C4E9;
     }
     
-    /* Cajas de texto más limpias */
-    .stTextInput > div > div > input {
-        background-color: rgba(0, 0, 0, 0.2); 
+    /* Botón */
+    .stButton > button {
+        background-color: #6A1B9A; /* Morado fuerte para destacar */
         color: white;
-        border: 1px solid rgba(255,255,255,0.2);
+        border: none;
+        border-radius: 8px;
+    }
+
+    /* Títulos en el lado derecho (Negros) */
+    h1, h2, h3 {
+        color: #000000 !important;
+    }
+    
+    /* Burbujas de chat */
+    .stChatMessage {
+        background-color: rgba(255, 255, 255, 0.5); /* Sutil transparencia */
+        border: 1px solid #E1BEE7;
+        border-radius: 10px;
+        color: #000000; /* Texto negro en el chat */
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- CONEXIÓN AUTOMÁTICA ---
+# --- CONEXIÓN ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
 except:
     api_key = None
 
-# --- BARRA LATERAL (IZQUIERDA) ---
+# --- BARRA LATERAL ---
 with st.sidebar:
-    st.header("Panel de Control")
-    modo = st.radio("Elige tu modo:", ["🟣 Asistente Personal", "✨ Gemini General"])
-    
+    st.header("Configuración")
+    modo = st.radio("Elige modo:", ["🟣 Asistente Personal", "✨ Gemini General"])
     if not api_key:
-        st.error("⚠️ Falta la API Key en Secrets.")
+        st.error("⚠️ Falta API Key en Secrets")
 
-# --- CHAT PRINCIPAL (DERECHA) ---
-st.title("Tu Espacio Personal")
+# --- ÁREA PRINCIPAL ---
+st.title("Tu Espacio")
 
 if api_key:
     genai.configure(api_key=api_key)
     
-    # Historial
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Mostrar mensajes
+    # Mostrar historial
     for message in st.session_state.messages:
         role = message["role"]
-        # Iconos: Usuario vs Asistente (según el modo guardado)
-        if role == "user":
-            avatar = "👤"
-        else:
-            avatar = "🟣" if message.get("mode") == "personal" else "✨"
-            
+        avatar = "👤" if role == "user" else ("🟣" if message.get("mode") == "personal" else "✨")
         with st.chat_message(role, avatar=avatar):
             st.markdown(message["content"])
 
-    # Input Usuario
-    if prompt := st.chat_input("Escribe algo..."):
+    # Input
+    if prompt := st.chat_input("Escribe aquí..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar="👤"):
             st.markdown(prompt)
 
-        # Determinar modo actual
         es_personal = ("Asistente" in modo)
         avatar_bot = "🟣" if es_personal else "✨"
         tag_modo = "personal" if es_personal else "gemini"
 
         with st.chat_message("assistant", avatar=avatar_bot):
             placeholder = st.empty()
+            placeholder.markdown("...")
             try:
-                # CAMBIO IMPORTANTE: Usamos 'gemini-pro' que es 100% compatible
-                model = genai.GenerativeModel('gemini-pro')
+                # Usamos el modelo Flash con la librería actualizada
+                model = genai.GenerativeModel('gemini-1.5-flash')
                 
                 if es_personal:
-                    sys = "Eres un asistente personal cálido, leal y servicial. Tu color es el morado. Responde de forma cercana."
+                    sys = "Eres un asistente personal útil. Responde de forma directa."
                     full_prompt = f"{sys}\n\nUsuario: {prompt}"
                 else:
-                    full_prompt = f"Responde como la IA Gemini de Google de forma objetiva.\n\nUsuario: {prompt}"
+                    full_prompt = f"Responde como Gemini.\n\nUsuario: {prompt}"
                 
                 response = model.generate_content(full_prompt)
-                bot_reply = response.text
+                text_reply = response.text
+                placeholder.markdown(text_reply)
                 
-                placeholder.markdown(bot_reply)
-                
-                # Guardar respuesta
                 st.session_state.messages.append({
                     "role": "model", 
-                    "content": bot_reply, 
+                    "content": text_reply, 
                     "mode": tag_modo
                 })
             except Exception as e:
                 placeholder.error(f"Error: {e}")
 else:
-    st.info("Configura tu llave secreta para empezar.")
+    st.info("Configurando...")
