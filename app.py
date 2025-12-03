@@ -6,24 +6,29 @@ import datetime
 from oauth2client.service_account import ServiceAccountCredentials
 from googleapiclient.discovery import build
 
-# --- 1. CONFIGURACIÓN ---
+# --- 1. DATOS DE USUARIO ---
 TU_EMAIL_GMAIL = "juanjesusmartinsr@gmail.com"
 
+# --- 2. CONFIGURACIÓN VISUAL ---
 st.set_page_config(page_title="Asistente Personal", page_icon="🟣", layout="wide")
 
 st.markdown("""
 <style>
+    /* DERECHA */
     .stApp { background-color: #FAF5FF !important; color: #000000 !important; }
     .stMarkdown p, h1, h2, h3, div, span, li, label { color: #000000 !important; }
+    /* IZQUIERDA */
     [data-testid="stSidebar"] { background-color: #1a0b2e !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
+    /* INPUTS */
     .stTextInput > div > div > input { background-color: #FFFFFF !important; color: #000000 !important; border: 1px solid #D1C4E9 !important; }
     .stButton > button { background-color: #6A1B9A !important; color: white !important; border: none !important; }
+    /* CHAT */
     .stChatMessage { background-color: #FFFFFF !important; border: 1px solid #E1BEE7 !important; color: #000000 !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. CONEXIONES ---
+# --- 3. FUNCIONES DE CONEXIÓN ---
 def obtener_credenciales():
     try:
         json_text = st.secrets["GOOGLE_CREDENTIALS"]
@@ -33,18 +38,14 @@ def obtener_credenciales():
             'https://www.googleapis.com/auth/drive',
             'https://www.googleapis.com/auth/calendar'
         ]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-        return creds
-    except Exception as e:
-        return None
+        return ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    except: return None
 
 def conectar_memoria(creds):
     try:
         client = gspread.authorize(creds)
-        sheet = client.open("Memoria_Asistente").sheet1
-        return sheet
-    except:
-        return None
+        return client.open("Memoria_Asistente").sheet1
+    except: return None
 
 def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso):
     try:
@@ -59,19 +60,54 @@ def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso):
     except Exception as e:
         return False, str(e)
 
-# --- 3. INICIALIZACIÓN ---
+# --- 4. FUNCIÓN ROBUSTA ANTI-ERROR 404 ---
+# Esta función prueba múltiples modelos si uno falla
+def llamar_gemini_seguro(prompt_texto, api_key):
+    # Lista de modelos a probar en orden de preferencia
+    modelos = [
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-pro",
+        "gemini-1.0-pro",
+        "gemini-pro"
+    ]
+    
+    ultimo_error = ""
+    
+    for modelo in modelos:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent?key={api_key}"
+            headers = {'Content-Type': 'application/json'}
+            data = { "contents": [{"parts": [{"text": prompt_texto}]}] }
+            
+            response = requests.post(url, headers=headers, data=json.dumps(data))
+            
+            if response.status_code == 200:
+                # Si funciona, devolvemos el texto y salimos del bucle
+                return response.json()['candidates'][0]['content']['parts'][0]['text']
+            else:
+                ultimo_error = f"{modelo} dio error {response.status_code}"
+                continue # Si falla, intenta el siguiente modelo de la lista
+        except Exception as e:
+            ultimo_error = str(e)
+            continue
+            
+    # Si llega aquí, fallaron todos
+    return f"Error de conexión: {ultimo_error}"
+
+# --- 5. INICIALIZACIÓN ---
+try:
+    api_key = st.secrets["GEMINI_API_KEY"].strip()
+except:
+    st.error("Falta API Key")
+    st.stop()
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
-    
-creds = obtener_credenciales()
-hoja = None
-estado_memoria = "Desconectada"
-
-if creds:
-    hoja = conectar_memoria(creds)
-    if hoja:
-        estado_memoria = "Conectada"
-        if not st.session_state.messages:
+    creds = obtener_credenciales()
+    if creds:
+        hoja = conectar_memoria(creds)
+        if hoja:
             try:
                 registros = hoja.get_all_records()
                 for r in registros:
@@ -81,17 +117,11 @@ if creds:
                         st.session_state.messages.append({"role": role, "content": msg, "mode": "personal"})
             except: pass
 
-# --- 4. BARRA LATERAL (RECUPERADA) ---
+# --- 6. UI ---
 with st.sidebar:
     st.header("Configuración")
     modo = st.radio("Modo:", ["🟣 Asistente Personal", "✨ Gemini General"])
-    st.write("---")
-    if estado_memoria == "Conectada":
-        st.success("🧠 Memoria Conectada")
-    else:
-        st.error("⚠️ Memoria Desconectada")
 
-# --- 5. UI PRINCIPAL ---
 st.title("Tu Espacio")
 
 for message in st.session_state.messages:
@@ -100,18 +130,17 @@ for message in st.session_state.messages:
     with st.chat_message(role, avatar=avatar):
         st.markdown(message["content"])
 
-# --- 6. PROCESAMIENTO ---
-try:
-    api_key = st.secrets["GEMINI_API_KEY"].strip()
-except:
-    st.error("Falta API Key")
-    st.stop()
-
+# --- 7. PROCESAMIENTO ---
 if prompt := st.chat_input("Escribe aquí..."):
+    # Guardar usuario
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar="👤"):
         st.markdown(prompt)
 
+    creds = obtener_credenciales()
+    hoja = None
+    if creds: hoja = conectar_memoria(creds)
+    
     if hoja:
         try:
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -125,23 +154,20 @@ if prompt := st.chat_input("Escribe aquí..."):
     respuesta_texto = ""
     evento_creado = False
 
-    # Análisis Agenda
+    # A. INTENTO DE AGENDAR
     if es_personal:
         prompt_analisis = f"""
         Fecha actual: {datetime.datetime.now().isoformat()}
         Usuario dice: "{prompt}"
-        Responde SOLO JSON: {{"agendar": true/false, "titulo": "...", "inicio": "ISO", "fin": "ISO"}}
+        Responde SOLO JSON: {{"agendar": true/false, "titulo": "...", "inicio": "YYYY-MM-DDTHH:MM:SS", "fin": "YYYY-MM-DDTHH:MM:SS"}}
         """
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-            headers = {'Content-Type': 'application/json'}
-            data = { "contents": [{"parts": [{"text": prompt_analisis}]}] }
-            resp = requests.post(url, headers=headers, data=json.dumps(data))
-            
-            if resp.status_code == 200:
-                texto_json = resp.json()['candidates'][0]['content']['parts'][0]['text']
-                texto_json = texto_json.replace("```json", "").replace("```", "").strip()
-                datos = json.loads(texto_json)
+        # Usamos la función segura que prueba varios modelos
+        texto_analisis = llamar_gemini_seguro(prompt_analisis, api_key)
+        
+        if "Error" not in texto_analisis:
+            try:
+                texto_analisis = texto_analisis.replace("```json", "").replace("```", "").strip()
+                datos = json.loads(texto_analisis)
 
                 if datos.get("agendar"):
                     with st.spinner("Agendando..."):
@@ -151,32 +177,19 @@ if prompt := st.chat_input("Escribe aquí..."):
                         else:
                             respuesta_texto = f"❌ Error calendario: {info}"
                         evento_creado = True
-        except: pass
+            except: pass
 
-    # Respuesta Chat
+    # B. RESPUESTA NORMAL
     if not evento_creado:
-        # Contexto simple para evitar errores de payload
+        historial = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages[-5:]])
         if es_personal:
-            # Enviamos solo los ultimos 3 mensajes para asegurar estabilidad
-            historial = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages[-3:]])
-            final = f"Eres un asistente personal útil. Memoria:\n{historial}\n\nUsuario: {prompt}"
+            final = f"Eres un asistente personal útil. Memoria reciente:\n{historial}\n\nUsuario: {prompt}"
         else:
             final = f"Responde como Gemini.\n\nUsuario: {prompt}"
             
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-            headers = {'Content-Type': 'application/json'}
-            data = { "contents": [{"parts": [{"text": final}]}] }
-            resp = requests.post(url, headers=headers, data=json.dumps(data))
-            
-            if resp.status_code == 200:
-                respuesta_texto = resp.json()['candidates'][0]['content']['parts'][0]['text']
-            else:
-                # AQUÍ TE MOSTRARÁ EL ERROR REAL
-                respuesta_texto = f"Error {resp.status_code}: {resp.text}"
-        except Exception as e:
-            respuesta_texto = f"Excepción: {e}"
+        respuesta_texto = llamar_gemini_seguro(final, api_key)
 
+    # Mostrar y Guardar
     with st.chat_message("assistant", avatar=avatar_bot):
         st.markdown(respuesta_texto)
         st.session_state.messages.append({"role": "model", "content": respuesta_texto, "mode": tag_modo})
