@@ -14,16 +14,12 @@ st.set_page_config(page_title="Asistente Personal", page_icon="🟣", layout="wi
 
 st.markdown("""
 <style>
-    /* DERECHA */
     .stApp { background-color: #FAF5FF !important; color: #000000 !important; }
     .stMarkdown p, h1, h2, h3, div, span, li, label { color: #000000 !important; }
-    /* IZQUIERDA */
     [data-testid="stSidebar"] { background-color: #1a0b2e !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
-    /* INPUTS */
     .stTextInput > div > div > input { background-color: #FFFFFF !important; color: #000000 !important; border: 1px solid #D1C4E9 !important; }
     .stButton > button { background-color: #6A1B9A !important; color: white !important; border: none !important; }
-    /* CHAT */
     .stChatMessage { background-color: #FFFFFF !important; border: 1px solid #E1BEE7 !important; color: #000000 !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -47,17 +43,18 @@ def conectar_memoria(creds):
         return client.open("Memoria_Asistente").sheet1
     except: return None
 
-# EVENTO CON HORA LIMA Y ALERTA POPUP
-def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso, minutos_alerta=10):
+# --- FUNCIÓN CALENDARIO "AGRESIVA" ---
+def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso, minutos_alerta):
     try:
         service = build('calendar', 'v3', credentials=creds)
         
-        reminders = {'useDefault': True}
-        if minutos_alerta > 0:
-            reminders = {
-                'useDefault': False,
-                'overrides': [{'method': 'popup', 'minutes': minutos_alerta}],
-            }
+        # Lógica reforzada: Siempre forzamos el override si hay minutos
+        reminders = {
+            'useDefault': False, # OBLIGAMOS a ignorar el default de 30 min
+            'overrides': [
+                {'method': 'popup', 'minutes': int(minutos_alerta)}
+            ]
+        }
 
         evento = {
             'summary': resumen,
@@ -70,7 +67,7 @@ def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso, minutos_alerta=
     except Exception as e:
         return False, str(e)
 
-# --- 4. CEREBRO: AUTODETECCIÓN ---
+# --- 4. CEREBRO Y AUTODETECCIÓN ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"].strip()
 except:
@@ -92,9 +89,7 @@ def detectar_modelo_real(key):
 
 modelo_activo = detectar_modelo_real(api_key)
 
-# FUNCION AUXILIAR: HORA PERÚ
 def get_hora_peru():
-    # Servidor UTC - 5 horas = Lima
     return datetime.datetime.utcnow() - datetime.timedelta(hours=5)
 
 # --- 5. INICIALIZACIÓN ---
@@ -159,9 +154,8 @@ if prompt := st.chat_input("Escribe aquí..."):
     respuesta_texto = ""
     evento_creado = False
 
-    # A. INTENTO DE AGENDAR (Con hora Perú correcta)
+    # A. INTENTO DE AGENDAR
     if es_personal:
-        # Aquí pasamos la hora corregida al cerebro para que sepa qué día es HOY en Lima
         ahora_peru = get_hora_peru().isoformat()
         
         prompt_analisis = f"""
@@ -169,11 +163,11 @@ if prompt := st.chat_input("Escribe aquí..."):
         Usuario dice: "{prompt}"
         
         Analiza si quiere agendar.
-        Si menciona alerta (ej: "avísame 10 min antes"), pon los minutos en "alerta_minutos".
-        Si no dice nada de alerta, pon 10.
+        Si menciona alerta (ej: "avísame 10 min antes"), pon el NÚMERO entero en "alerta_minutos".
+        Si no dice alerta, pon 15.
         
         Responde SOLO JSON: 
-        {{"agendar": true/false, "titulo": "...", "inicio": "YYYY-MM-DDTHH:MM:SS", "fin": "YYYY-MM-DDTHH:MM:SS", "alerta_minutos": 10}}
+        {{"agendar": true/false, "titulo": "...", "inicio": "ISO", "fin": "ISO", "alerta_minutos": 15}}
         """
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_activo}:generateContent?key={api_key}"
@@ -188,10 +182,11 @@ if prompt := st.chat_input("Escribe aquí..."):
 
                 if datos.get("agendar"):
                     with st.spinner("Agendando..."):
-                        minutos = int(datos.get("alerta_minutos", 10))
+                        # Convertimos a entero y usamos valor absoluto para evitar negativos
+                        minutos = abs(int(datos.get("alerta_minutos", 15)))
                         exito, info = crear_evento_calendario(creds, datos["titulo"], datos["inicio"], datos["fin"], minutos)
                         if exito:
-                            respuesta_texto = f"✅ Agendado: **{datos['titulo']}** (Alerta: {minutos} min antes)"
+                            respuesta_texto = f"✅ Agendado: **{datos['titulo']}**\n🔔 Alerta configurada: **{minutos} minutos antes**"
                         else:
                             respuesta_texto = f"❌ Error calendario: {info}"
                         evento_creado = True
@@ -203,20 +198,15 @@ if prompt := st.chat_input("Escribe aquí..."):
         for m in st.session_state.messages[-40:]:
             historial += f"{m['role']}: {m['content']}\n"
         
-        # Le damos fecha humana de Perú para que pueda responder "¿Qué hora es?"
         fecha_humana = get_hora_peru().strftime("%A %d de %B del %Y, %H:%M")
         
         if es_personal:
             final = f"""
-            INSTRUCCIONES: Eres un asistente personal leal. Tienes memoria.
+            INSTRUCCIONES: Eres un asistente personal leal.
             NO digas que eres un modelo de lenguaje.
             
-            DATOS TIEMPO REAL (LIMA, PERÚ):
-            {fecha_humana}
-            
-            MEMORIA:
-            {historial}
-            
+            TIEMPO EN LIMA: {fecha_humana}
+            MEMORIA: {historial}
             USUARIO: {prompt}
             """
         else:
