@@ -20,7 +20,7 @@ st.markdown("""
     }
     /* Texto sutil en sidebar */
     [data-testid="stSidebar"] .stMarkdown {
-        color: #FFFFFF;
+        color: #31f70a;
     }
 
     /* --- ELEMENTOS DE INTERFAZ --- */
@@ -143,6 +143,7 @@ if api_key:
                 message_placeholder.error(f"Error de conexión: {e}")
 else:
     st.info("👈 Esperando configuración de API Key en la barra lateral.")
+
 
 
 
