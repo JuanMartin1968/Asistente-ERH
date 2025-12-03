@@ -8,14 +8,14 @@ from datetime import datetime
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Asistente Personal", page_icon="🟣", layout="wide")
 
-# --- DISEÑO (TUS COLORES) ---
+# --- DISEÑO ---
 st.markdown("""
 <style>
-    /* DERECHA: Fondo claro, letras NEGRAS */
+    /* DERECHA */
     .stApp { background-color: #FAF5FF !important; color: #000000 !important; }
     .stMarkdown p, h1, h2, h3, div, span, li, label { color: #000000 !important; }
     
-    /* IZQUIERDA: Fondo Oscuro, letras BLANCAS */
+    /* IZQUIERDA */
     [data-testid="stSidebar"] { background-color: #1a0b2e !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
 
@@ -28,23 +28,23 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 1. CONEXIÓN A GOOGLE SHEETS (MEMORIA) ---
+# --- 1. CONEXIÓN A MEMORIA (NUEVO MÉTODO) ---
 def conectar_memoria():
     try:
-        # Busca las credenciales en los Secrets
+        # AQUI ESTA LA CLAVE: Leemos el bloque de texto que pegaste
+        json_text = st.secrets["GOOGLE_CREDENTIALS"]
+        creds_dict = json.loads(json_text)
+        
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        creds_dict = dict(st.secrets["gcp_service_account"])
-        
-        # Arreglo común: a veces la private_key en secrets pierde los saltos de línea
-        creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
-        
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
         
-        # Abre la hoja por su nombre EXACTO
+        # IMPORTANTE: El nombre de la hoja debe ser EXACTO
         sheet = client.open("Memoria_Asistente").sheet1
         return sheet
     except Exception as e:
+        # Si falla, guardamos el error exacto para mostrártelo
+        st.session_state.error_memoria = str(e)
         return None
 
 # --- 2. RECUPERAR LLAVE GEMINI ---
@@ -54,7 +54,7 @@ except:
     st.error("⚠️ Error: Falta GEMINI_API_KEY en Secrets.")
     st.stop()
 
-# --- 3. DETECTOR DE MODELO (SILENCIOSO) ---
+# --- 3. DETECTOR DE MODELO ---
 @st.cache_data
 def obtener_mejor_modelo(key):
     try:
@@ -70,79 +70,69 @@ def obtener_mejor_modelo(key):
 
 modelo_actual = obtener_mejor_modelo(api_key)
 
-# --- INICIALIZACIÓN DE MEMORIA ---
+# --- INICIALIZACIÓN ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
+    st.session_state.error_memoria = None
     
-    # Intentar cargar historial antiguo desde Sheets
+    # Cargar historial
     hoja = conectar_memoria()
     if hoja:
         try:
-            # Leemos todos los registros (excepto encabezado)
             registros = hoja.get_all_records()
             for r in registros:
-                # Solo cargamos si hay contenido
                 if r.get("mensaje"):
                     role = "user" if r.get("rol") == "user" else "model"
-                    # Reconstruimos el formato de chat
                     st.session_state.messages.append({
                         "role": role,
-                        "content": r.get("mensaje"),
-                        "mode": "personal" # Asumimos histórico como personal por defecto
+                        "content": str(r.get("mensaje")),
+                        "mode": "personal"
                     })
-        except Exception as e:
-            st.warning(f"No pude leer la memoria antigua: {e}")
+        except:
+            pass
 
 # --- BARRA LATERAL ---
 with st.sidebar:
     st.header("Configuración")
     modo = st.radio("Modo:", ["🟣 Asistente Personal", "✨ Gemini General"])
     
-    # Indicador de estado de memoria
-    hoja_prueba = conectar_memoria()
-    if hoja_prueba:
-        st.success("🧠 Memoria conectada")
+    st.write("---")
+    # Diagnóstico
+    if st.session_state.get("error_memoria"):
+        st.error(f"❌ Error: {st.session_state.error_memoria}")
     else:
-        st.error("🧠 Memoria desconectada (Revisa Secrets)")
+        st.success("🧠 Memoria Conectada")
 
 # --- ÁREA DE CHAT ---
 st.title("Tu Espacio")
 
-# Mostrar historial
 for message in st.session_state.messages:
     role = message["role"]
     avatar = "👤" if role == "user" else ("🟣" if message.get("mode") == "personal" else "✨")
     with st.chat_message(role, avatar=avatar):
         st.markdown(message["content"])
 
-# --- LÓGICA DE ENVÍO Y GUARDADO ---
+# --- ENVÍO ---
 if prompt := st.chat_input("Escribe aquí..."):
-    # 1. Guardar mensaje usuario en Session State
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar="👤"):
         st.markdown(prompt)
 
-    # 2. Guardar mensaje usuario en Google Sheets (Memoria)
+    # Guardar en Memoria
     hoja = conectar_memoria()
     if hoja:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         try:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             hoja.append_row([timestamp, "user", prompt])
         except:
-            pass # Si falla guardar, seguimos funcionando
+            pass
 
-    # 3. Preparar respuesta IA
     es_personal = ("Asistente" in modo)
     tag_modo = "personal" if es_personal else "gemini"
     avatar_bot = "🟣" if es_personal else "✨"
+    
+    texto_final = f"Eres un asistente personal útil. Usuario: {prompt}" if es_personal else f"Responde como Gemini. Usuario: {prompt}"
 
-    if es_personal:
-        sistema = "Eres un asistente personal útil y directo. Tu estética es morada."
-        texto_final = f"{sistema}\n\nUsuario: {prompt}"
-    else:
-        texto_final = f"Responde como Gemini.\n\nUsuario: {prompt}"
-
-    # 4. Generar respuesta
     with st.chat_message("assistant", avatar=avatar_bot):
         placeholder = st.empty()
         placeholder.markdown("...")
@@ -155,24 +145,17 @@ if prompt := st.chat_input("Escribe aquí..."):
             response = requests.post(url, headers=headers, data=json.dumps(data))
             
             if response.status_code == 200:
-                respuesta = response.json()
-                if 'candidates' in respuesta:
-                    texto_bot = respuesta['candidates'][0]['content']['parts'][0]['text']
-                    placeholder.markdown(texto_bot)
-                    
-                    # Guardar en Session State
-                    st.session_state.messages.append({"role": "model", "content": texto_bot, "mode": tag_modo})
-                    
-                    # Guardar en Google Sheets (Memoria)
-                    if hoja:
-                        try:
-                            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            hoja.append_row([timestamp, "assistant", texto_bot])
-                        except:
-                            pass
-                else:
-                    placeholder.error("Sin respuesta.")
+                texto = response.json()['candidates'][0]['content']['parts'][0]['text']
+                placeholder.markdown(texto)
+                st.session_state.messages.append({"role": "model", "content": texto, "mode": tag_modo})
+                
+                if hoja:
+                    try:
+                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        hoja.append_row([timestamp, "assistant", texto])
+                    except:
+                        pass
             else:
-                placeholder.error(f"Error {response.status_code}: {response.text}")
+                placeholder.error(f"Error {response.status_code}")
         except Exception as e:
-            placeholder.error(f"Error de conexión: {e}")
+            placeholder.error(f"Error: {e}")
