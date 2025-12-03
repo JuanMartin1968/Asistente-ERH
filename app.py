@@ -43,16 +43,19 @@ def conectar_memoria(creds):
         return client.open("Memoria_Asistente").sheet1
     except: return None
 
-# --- FUNCIÓN CALENDARIO "AGRESIVA" ---
+# --- FUNCIÓN CALENDARIO "AUTORITARIA" ---
 def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso, minutos_alerta):
     try:
         service = build('calendar', 'v3', credentials=creds)
         
-        # Lógica reforzada: Siempre forzamos el override si hay minutos
+        # Aseguramos que sea entero
+        min_val = int(minutos_alerta)
+        
+        # OBLIGAMOS a ignorar el default y poner nuestra alerta
         reminders = {
-            'useDefault': False, # OBLIGAMOS a ignorar el default de 30 min
+            'useDefault': False, 
             'overrides': [
-                {'method': 'popup', 'minutes': int(minutos_alerta)}
+                {'method': 'popup', 'minutes': min_val}
             ]
         }
 
@@ -157,17 +160,16 @@ if prompt := st.chat_input("Escribe aquí..."):
     # A. INTENTO DE AGENDAR
     if es_personal:
         ahora_peru = get_hora_peru().isoformat()
-        
         prompt_analisis = f"""
         Fecha/Hora actual en Lima, Perú: {ahora_peru}
         Usuario dice: "{prompt}"
         
         Analiza si quiere agendar.
-        Si menciona alerta (ej: "avísame 10 min antes"), pon el NÚMERO entero en "alerta_minutos".
-        Si no dice alerta, pon 15.
+        Si menciona alerta (ej: "avísame 5 min antes"), pon el NÚMERO en "alerta_minutos".
+        Si no dice nada, pon 10.
         
         Responde SOLO JSON: 
-        {{"agendar": true/false, "titulo": "...", "inicio": "ISO", "fin": "ISO", "alerta_minutos": 15}}
+        {{"agendar": true/false, "titulo": "...", "inicio": "ISO", "fin": "ISO", "alerta_minutos": 10}}
         """
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_activo}:generateContent?key={api_key}"
@@ -182,11 +184,11 @@ if prompt := st.chat_input("Escribe aquí..."):
 
                 if datos.get("agendar"):
                     with st.spinner("Agendando..."):
-                        # Convertimos a entero y usamos valor absoluto para evitar negativos
-                        minutos = abs(int(datos.get("alerta_minutos", 15)))
+                        minutos = int(datos.get("alerta_minutos", 10))
+                        # LLAMADA A LA FUNCION AUTORITARIA
                         exito, info = crear_evento_calendario(creds, datos["titulo"], datos["inicio"], datos["fin"], minutos)
                         if exito:
-                            respuesta_texto = f"✅ Agendado: **{datos['titulo']}**\n🔔 Alerta configurada: **{minutos} minutos antes**"
+                            respuesta_texto = f"✅ Agendado: **{datos['titulo']}**\n🔔 Alerta forzada a: **{minutos} minutos antes**"
                         else:
                             respuesta_texto = f"❌ Error calendario: {info}"
                         evento_creado = True
