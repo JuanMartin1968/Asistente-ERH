@@ -28,6 +28,7 @@ st.markdown("""
     .stButton > button { background-color: #6A1B9A !important; color: white !important; border: none !important; }
     /* CHAT */
     .stChatMessage { background-color: #FFFFFF !important; border: 1px solid #E1BEE7 !important; color: #000000 !important; }
+    /* Ocultamos el input de audio original del cuerpo principal */
     [data-testid="stAudioInput"] { margin-bottom: 20px; }
 </style>
 """, unsafe_allow_html=True)
@@ -55,7 +56,6 @@ def conectar_memoria(creds):
 def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso, nota_alerta=""):
     try:
         service = build('calendar', 'v3', credentials=creds)
-        # Usamos 10 minutos por defecto, sin usar el default de Google
         reminders = {'useDefault': False, 'overrides': [{'method': 'popup', 'minutes': 10}]} 
         description = f"Agendado por Asistente.\n{nota_alerta}"
         evento = {
@@ -88,7 +88,7 @@ def texto_a_audio(texto):
 def get_hora_peru():
     return datetime.datetime.utcnow() - datetime.timedelta(hours=5)
 
-# --- 5. CEREBRO Y AUTODETECCIÓN ---
+# --- 3. CEREBRO Y AUTODETECCIÓN ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"].strip()
 except:
@@ -110,7 +110,7 @@ def detectar_modelo_real(key):
 
 modelo_activo = detectar_modelo_real(api_key)
 
-# --- 6. TRANSCRIPCIÓN (CALL 1) ---
+# --- 4. TRANSCRIPCIÓN (CALL 1) ---
 def transcribir_audio(b64_audio, api_key):
     try:
         url = f"https://generativelanguage.googleapis.com/v1beta/{detectar_modelo_real(api_key)}:generateContent?key={api_key}"
@@ -132,7 +132,7 @@ def transcribir_audio(b64_audio, api_key):
     return "No se pudo transcribir el audio."
 
 
-# --- 7. INICIALIZACIÓN Y UI ---
+# --- 5. INICIALIZACIÓN Y CARGA DE DATOS ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -147,6 +147,7 @@ if creds:
         hoja_chat = h1
         hoja_perfil = h2
         estado_memoria = "Conectada"
+        # Cargar Chat y Perfil
         if not st.session_state.messages:
             try:
                 registros = hoja_chat.get_all_records()
@@ -164,11 +165,17 @@ if creds:
                     perfil_texto += " ".join(fila) + "\n"
             except: pass
 
-# --- UI ---
+# --- 6. BARRA LATERAL (FIX DEL MICRÓFONO) ---
 with st.sidebar:
     st.header("Configuración")
+    # Micrófono aquí (FIX)
+    audio_wav = st.audio_input("🎙️ Toca para hablar") 
+    
+    st.write("---")
+    
     modo = st.radio("Modo:", ["🟣 Asistente Personal", "✨ Gemini General"])
     st.write("---")
+    
     if estado_memoria == "Conectada":
         st.success("🧠 Memoria Conectada")
     else:
@@ -176,9 +183,10 @@ with st.sidebar:
 
 st.title("Tu Espacio")
 
-# Input de audio y texto
-audio_wav = st.audio_input("🎙️ Toca para hablar")
+# Input de texto (permanece abajo)
 prompt_texto = st.chat_input("Escribe aquí...")
+
+# --- 7. LÓGICA DE DETECCIÓN DE INPUT ---
 input_usuario = None
 es_audio = False
 
@@ -204,39 +212,40 @@ if input_usuario and prompt_texto is not None:
 
     # 2. PROCESAMIENTO DE AUDIO (Call 1)
     if es_audio:
+        # 2a. Reemplazamos el placeholder en el último mensaje
         st.session_state.messages[-1]['content'] = "⏳ Transcribiendo..."
-        with st.chat_message("user", avatar="👤"): st.markdown("⏳ Transcribiendo...")
         
+        # 2b. Transcribimos
         bytes_data = audio_wav.getvalue()
         b64_audio = base64.b64encode(bytes_data).decode('utf-8')
         
         transcripcion = transcribir_audio(b64_audio, api_key)
         
-        # 3. Actualizar historial con la transcripción real
+        # 2c. Actualizar historial con la transcripción real y el input para el guardado
         st.session_state.messages[-1]['content'] = transcripcion
-        input_usuario = transcripcion # Reemplazamos el input para el chat y el guardado
+        input_usuario = transcripcion 
         
+        # 2d. Re-dibujar el mensaje del usuario con la transcripción
+        for _ in range(2): # Borrar y redibujar los dos últimos mensajes
+             st.session_state.messages.pop()
+        st.session_state.messages.append({"role": "user", "content": transcripcion, "mode": "personal"})
         with st.chat_message("user", avatar="👤"):
-            st.markdown(transcripcion) # Mostrar la transcripción final
+            st.markdown(transcripcion)
 
-    # 4. PREPARAR RESPUESTA (Call 2)
+    # 3. PREPARAR RESPUESTA (Call 2)
     es_personal = ("Asistente" in modo)
     tag_modo = "personal" if es_personal else "gemini"
     avatar_bot = "🟣" if es_personal else "✨"
-    
     respuesta_texto = ""
     
-    # Contexto
-    historial = ""
-    for m in st.session_state.messages[-40:]:
-        historial += f"{m['role']}: {m['content']}\n"
-    
+    # Contexto para la IA
+    historial = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages[-40:]])
     fecha_humana = get_hora_peru().strftime("%A %d de %B del %Y, %H:%M")
     
     if es_personal:
         final = f"""
         INSTRUCCIONES: Eres un asistente personal leal. NO digas que eres IA.
-        TIEMPO EN LIMA: {fecha_humana}
+        HORA OFICIAL PERÚ (UTC-5): {fecha_humana}
         PERFIL: {perfil_texto}
         MEMORIA: {historial}
         USUARIO: {input_usuario}
@@ -258,7 +267,7 @@ if input_usuario and prompt_texto is not None:
     except Exception as e:
         respuesta_texto = f"Error: {e}"
 
-    # 5. RESPUESTA FINAL
+    # 4. RESPUESTA FINAL
     with st.chat_message("assistant", avatar=avatar_bot):
         st.markdown(respuesta_texto)
         
@@ -268,13 +277,13 @@ if input_usuario and prompt_texto is not None:
             if audio_fp:
                 st.audio(audio_fp, format='audio/mp3')
             
-    # 6. GUARDAR EN MEMORIA
+    # 5. GUARDAR EN MEMORIA Y SESIÓN
     st.session_state.messages.append({"role": "model", "content": respuesta_texto, "mode": tag_modo})
     
     if hoja_chat:
         try:
             timestamp = get_hora_peru().strftime("%Y-%m-%d %H:%M:%S")
-            # Guardamos la transcripción y la respuesta del bot
+            # Guardamos la transcripción y la respuesta del bot (FIXED)
             hoja_chat.append_row([timestamp, "user", input_usuario]) 
             hoja_chat.append_row([timestamp, "assistant", respuesta_texto])
         except: pass
