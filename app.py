@@ -9,64 +9,32 @@ import re
 from gtts import gTTS
 from oauth2client.service_account import ServiceAccountCredentials
 from googleapiclient.discovery import build
-import streamlit_audiorecorder as st_audiorecorder
 
-# --- 1. CONFIGURACIÓN ---
+# --- 1. DATOS DEL USUARIO ---
 TU_EMAIL_GMAIL = "juanjesusmartinsr@gmail.com"
 
+# --- 2. CONFIGURACIÓN VISUAL ---
 st.set_page_config(page_title="Asistente Personal", page_icon="🟣", layout="wide")
 
 st.markdown("""
 <style>
+    /* DERECHA */
     .stApp { background-color: #FAF5FF !important; color: #000000 !important; }
     .stMarkdown p, h1, h2, h3, div, span, li, label { color: #000000 !important; }
+    /* IZQUIERDA */
     [data-testid="stSidebar"] { background-color: #1a0b2e !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
+    /* INPUTS */
     .stTextInput > div > div > input { background-color: #FFFFFF !important; color: #000000 !important; border: 1px solid #D1C4E9 !important; }
     .stButton > button { background-color: #6A1B9A !important; color: white !important; border: none !important; }
+    /* CHAT */
     .stChatMessage { background-color: #FFFFFF !important; border: 1px solid #E1BEE7 !important; color: #000000 !important; }
-    [data-testid="stSidebar"] div.stAudioRecorder { padding-top: 10px; } 
+    /* Estilo para el input de audio */
+    [data-testid="stAudioInput"] { margin-bottom: 20px; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. FUNCIONES DE CONEXIÓN Y UTILIDAD ---
-def obtener_credenciales():
-    try:
-        json_text = st.secrets["GOOGLE_CREDENTIALS"]
-        creds_dict = json.loads(json_text, strict=False)
-        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/calendar']
-        return ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    except: return None
-
-def conectar_memoria(creds):
-    try:
-        client = gspread.authorize(creds)
-        wb = client.open("Memoria_Asistente")
-        # Intentamos obtener las dos hojas
-        try:
-            hoja_p = wb.worksheet("Perfil")
-        except:
-            hoja_p = None
-        return wb.sheet1, hoja_p
-    except: return None, None
-
-def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso, nota_alerta=""):
-    try:
-        service = build('calendar', 'v3', credentials=creds)
-        reminders = {'useDefault': False, 'overrides': [{'method': 'popup', 'minutes': 10}]} 
-        description = f"Agendado por Asistente.\n{nota_alerta}"
-        evento = {
-            'summary': resumen,
-            'description': description,
-            'start': {'dateTime': inicio_iso, 'timeZone': 'America/Lima'}, 
-            'end': {'dateTime': fin_iso, 'timeZone': 'America/Lima'},
-            'reminders': reminders 
-        }
-        creado = service.events().insert(calendarId=TU_EMAIL_GMAIL, body=evento).execute()
-        return True, creado.get('htmlLink')
-    except Exception as e:
-        return False, str(e)
-
+# --- 3. FUNCIONES DE AUDIO Y LIMPIEZA ---
 def limpiar_texto_para_audio(texto):
     t = re.sub(r'[*_#]', '', texto)
     t = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', t)
@@ -82,10 +50,50 @@ def texto_a_audio(texto):
         return fp
     except: return None
 
-def get_hora_peru():
-    return datetime.datetime.utcnow() - datetime.timedelta(hours=5)
+# --- 4. FUNCIONES DE CONEXIÓN Y ALERTA ---
+def obtener_credenciales():
+    try:
+        json_text = st.secrets["GOOGLE_CREDENTIALS"]
+        creds_dict = json.loads(json_text, strict=False)
+        scope = [
+            'https://spreadsheets.google.com/feeds',
+            'https://www.googleapis.com/auth/drive',
+            'https://www.googleapis.com/auth/calendar'
+        ]
+        return ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    except: return None
 
-# --- 3. CEREBRO ---
+def conectar_memoria(creds):
+    try:
+        client = gspread.authorize(creds)
+        wb = client.open("Memoria_Asistente")
+        # Intentamos conectar hoja chat y perfil
+        try:
+            hoja_perfil = wb.worksheet("Perfil")
+        except:
+            hoja_perfil = None
+        return wb.sheet1, hoja_perfil
+    except: return None, None
+
+def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso, nota_alerta=""):
+    try:
+        service = build('calendar', 'v3', credentials=creds)
+        reminders = {'useDefault': False, 'overrides': [{'method': 'popup', 'minutes': 10}]}
+        
+        description = f"Agendado por Asistente.\n{nota_alerta}"
+        evento = {
+            'summary': resumen,
+            'description': description,
+            'start': {'dateTime': inicio_iso, 'timeZone': 'America/Lima'}, 
+            'end': {'dateTime': fin_iso, 'timeZone': 'America/Lima'},
+            'reminders': reminders 
+        }
+        creado = service.events().insert(calendarId=TU_EMAIL_GMAIL, body=evento).execute()
+        return True, creado.get('htmlLink')
+    except Exception as e:
+        return False, str(e)
+
+# --- 5. CEREBRO ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"].strip()
 except:
@@ -107,22 +115,10 @@ def detectar_modelo_real(key):
 
 modelo_activo = detectar_modelo_real(api_key)
 
-# Función auxiliar para llamar a Gemini (Simplificada para evitar error 400)
-def llamar_gemini(sys_text, user_parts):
-    url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_activo}:generateContent?key={api_key}"
-    headers = {'Content-Type': 'application/json'}
-    # Estructura simple: Una lista de partes que incluye el sistema y el usuario
-    # Gemini 1.5 Flash acepta instrucciones de sistema dentro del turno de usuario o separadas.
-    # Aquí las combinamos en un solo bloque de contenido para máxima compatibilidad y evitar errores de estructura.
-    
-    # Construimos las partes: [Texto Sistema] + [Partes Usuario (Texto o Audio)]
-    partes_combinadas = [{"text": sys_text}] + user_parts
-    
-    payload = {"contents": [{"parts": partes_combinadas}]}
-    
-    return requests.post(url, headers=headers, data=json.dumps(payload))
+def get_hora_peru():
+    return datetime.datetime.utcnow() - datetime.timedelta(hours=5)
 
-# --- 4. INICIALIZACIÓN ---
+# --- 6. INICIALIZACIÓN ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -146,13 +142,11 @@ if creds:
                     r_low = {k.lower(): v for k, v in r.items()}
                     msg = str(r_low.get("mensaje", "")).strip()
                     if msg:
-                        # Detectamos si es usuario o modelo
-                        rol_orig = r_low.get("rol", "model").lower()
-                        role = "user" if "user" in rol_orig else "model"
+                        role = "user" if r_low.get("rol", "model").lower() == "user" else "model"
                         st.session_state.messages.append({"role": role, "content": msg, "mode": "personal"})
             except: pass
             
-        # Cargar Perfil
+        # Cargar Perfil (Para que la IA sepa qué ya sabe)
         if hoja_perfil:
             try:
                 vals = hoja_perfil.get_all_values()
@@ -160,13 +154,9 @@ if creds:
                     perfil_texto += " ".join(fila) + "\n"
             except: pass
 
-# --- 5. UI ---
+# --- 7. UI ---
 with st.sidebar:
     st.header("Configuración")
-    # MICRÓFONO ESTABLE
-    audio_bytes = st_audiorecorder.audiorecorder("🔴 Grabar", "⏹️ Parar")
-    
-    st.write("---")
     modo = st.radio("Modo:", ["🟣 Asistente Personal", "✨ Gemini General"])
     st.write("---")
     if estado_memoria == "Conectada":
@@ -176,38 +166,37 @@ with st.sidebar:
 
 st.title("Tu Espacio")
 
+# Input Unificado
+audio_wav = st.audio_input("🎙️ Toca para hablar")
 prompt_texto = st.chat_input("Escribe aquí...")
-
-# Historial Visual
-for message in st.session_state.messages:
-    role = message["role"]
-    avatar = "👤" if role == "user" else ("🟣" if message.get("mode") == "personal" else "✨")
-    with st.chat_message(role, avatar=avatar):
-        st.markdown(message["content"])
-
-# --- 6. PROCESAMIENTO UNIFICADO ---
-input_usuario_log = None # Lo que guardamos en texto
-user_parts = []          # Lo que enviamos a la API
+input_usuario = None
 es_audio = False
 
 if prompt_texto:
-    input_usuario_log = prompt_texto
-    user_parts = [{"text": prompt_texto}]
-    
-elif len(audio_bytes) > 0:
+    input_usuario = prompt_texto
+elif audio_wav:
     es_audio = True
-    input_usuario_log = "🎤 [Audio]"
-    b64_audio = base64.b64encode(audio_bytes).decode('utf-8')
-    user_parts = [
-        {"text": "Transcribe este audio y responde a él. Si pido agendar, extrae los datos."},
-        {"inline_data": {"mime_type": "audio/wav", "data": b64_audio}}
-    ]
+    input_usuario = "🎤 [Audio enviado]"
 
-if user_parts:
+if input_usuario:
+    # Preparar payload
+    contenido_usuario = []
+    
+    if es_audio:
+        bytes_data = audio_wav.getvalue()
+        b64_audio = base64.b64encode(bytes_data).decode('utf-8')
+        sys_audio_inst = "Transcribe el audio EXACTAMENTE, luego procede. Si pides agendar, extrae JSON."
+        contenido_usuario = [
+            {"text": sys_audio_inst},
+            {"inline_data": {"mime_type": "audio/wav", "data": b64_audio}}
+        ]
+    else:
+        contenido_usuario = [{"text": input_usuario}]
+
     # Mostrar mensaje usuario
-    st.session_state.messages.append({"role": "user", "content": input_usuario_log, "mode": "personal"})
+    st.session_state.messages.append({"role": "user", "content": input_usuario, "mode": "personal"})
     with st.chat_message("user", avatar="👤"):
-        st.markdown(input_usuario_log)
+        st.markdown(input_usuario)
 
     # Contexto
     es_personal = ("Asistente" in modo)
@@ -217,22 +206,21 @@ if user_parts:
     respuesta_texto = ""
     evento_creado = False
     
-    ahora_peru = get_hora_peru().isoformat()
-    fecha_humana = get_hora_peru().strftime("%A %d de %B del %Y, %H:%M")
-    
-    historial_txt = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages[-40:]])
+    # URL y Headers para llamadas
+    url_gen = f"https://generativelanguage.googleapis.com/v1beta/{modelo_activo}:generateContent?key={api_key}"
+    headers_gen = {'Content-Type': 'application/json'}
 
     # --- A. AGENDA ---
     if es_personal:
+        ahora_peru = get_hora_peru().isoformat()
         sys_agenda = f"""
         Fecha Lima: {ahora_peru}
-        Analiza si el usuario quiere agendar.
-        Responde SOLO JSON: {{"agendar": true, "titulo": "...", "inicio": "ISO", "fin": "ISO", "nota_alerta": "..."}}
-        Si no, {{"agendar": false}}
+        Analiza input. Si quiere agendar: {{"agendar": true, "titulo": "...", "inicio": "ISO", "fin": "ISO", "nota_alerta": "..."}}
+        Si no: {{"agendar": false}}
         """
         try:
-            # Enviamos sys_agenda + user_parts (que puede ser audio o texto)
-            resp = llamar_gemini(sys_agenda, user_parts)
+            payload = { "contents": [{"parts": [{"text": sys_agenda}] + (contenido_usuario[0]['parts'] if es_audio else contenido_usuario) }] }
+            resp = requests.post(url_gen, headers=headers_gen, data=json.dumps(payload))
             if resp.status_code == 200:
                 txt = resp.json()['candidates'][0]['content']['parts'][0]['text']
                 txt = txt.replace("```json", "").replace("```", "").strip()
@@ -247,48 +235,56 @@ if user_parts:
                         evento_creado = True
         except: pass
 
-    # --- B. PERFIL (GUARDAR) - CORREGIDO ---
+    # --- B. PERFIL (ESTA ES LA PARTE QUE FALTABA) ---
     if es_personal and not evento_creado and hoja_perfil:
         try:
             sys_perfil = f"""
-            Analiza si el usuario dio un dato PERMANENTE nuevo sobre sí mismo.
-            PERFIL ACTUAL: {perfil_texto}
-            Si el dato NO está en el perfil actual, responde SOLO con el dato nuevo.
+            Analiza si el usuario dio un dato PERMANENTE nuevo (nombre, gusto, trabajo).
+            PERFIL EXISTENTE: "{perfil_texto}"
+            Si es nuevo y NO está en el perfil existente, responde SOLO con el dato.
             Si no hay nada nuevo, responde NO.
             """
-            resp_p = llamar_gemini(sys_perfil, user_parts)
+            payload_p = { "contents": [{"parts": [{"text": sys_perfil}] + (contenido_usuario[0]['parts'] if es_audio else contenido_usuario) }] }
+            resp_p = requests.post(url_gen, headers=headers_gen, data=json.dumps(payload_p))
+            
             if resp_p.status_code == 200:
-                nuevo = resp_p.json()['candidates'][0]['content']['parts'][0]['text'].strip()
-                if nuevo and "NO" not in nuevo and len(nuevo) < 200:
-                    hoja_perfil.append_row([get_hora_peru().strftime("%Y-%m-%d"), nuevo])
+                dato_nuevo = resp_p.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+                if dato_nuevo and "NO" not in dato_nuevo and len(dato_nuevo) < 200:
+                    hoja_perfil.append_row([get_hora_peru().strftime("%Y-%m-%d"), dato_nuevo])
         except: pass
 
-    # --- C. RESPUESTA CONVERSACIONAL ---
+    # --- C. RESPUESTA ---
     if not evento_creado:
+        historial = ""
+        for m in st.session_state.messages[-40:]:
+            historial += f"{m['role']}: {m['content']}\n"
+        
+        fecha_hum = get_hora_peru().strftime("%A %d de %B del %Y, %H:%M")
+        
         if es_personal:
             sys_msg = f"""
             Eres asistente personal leal. NO digas que eres IA.
             PERFIL: {perfil_texto}
-            FECHA LIMA: {fecha_humana}
-            MEMORIA: {historial_txt}
+            FECHA LIMA: {fecha_hum}
+            MEMORIA: {historial}
             """
         else:
             sys_msg = "Responde como Gemini."
 
         try:
-            resp = llamar_gemini(sys_msg, user_parts)
+            payload = { "contents": [{"parts": [{"text": sys_msg}] + (contenido_usuario[0]['parts'] if es_audio else contenido_usuario) }] }
+            resp = requests.post(url_gen, headers=headers_gen, data=json.dumps(payload))
             if resp.status_code == 200:
                 respuesta_texto = resp.json()['candidates'][0]['content']['parts'][0]['text']
             else:
-                respuesta_texto = f"Error {resp.status_code}: {resp.text}"
+                respuesta_texto = f"Error {resp.status_code}"
         except Exception as e:
             respuesta_texto = f"Error: {e}"
 
-    # --- D. MOSTRAR Y GUARDAR ---
+    # --- D. MOSTRAR ---
     with st.chat_message("assistant", avatar=avatar_bot):
         st.markdown(respuesta_texto)
         
-        # Audio solo si el usuario usó micrófono
         if es_audio:
             audio_fp = texto_a_audio(respuesta_texto)
             if audio_fp:
@@ -299,7 +295,7 @@ if user_parts:
         if hoja_chat:
             try:
                 timestamp = get_hora_peru().strftime("%Y-%m-%d %H:%M:%S")
-                # Guardamos en la hoja
-                hoja_chat.append_row([timestamp, "user", input_usuario_log]) 
+                guardar_input = "[Audio]" if es_audio else input_usuario
+                hoja_chat.append_row([timestamp, "user", guardar_input]) 
                 hoja_chat.append_row([timestamp, "assistant", respuesta_texto])
             except: pass
