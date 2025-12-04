@@ -9,76 +9,98 @@ import re
 from gtts import gTTS
 from oauth2client.service_account import ServiceAccountCredentials
 from googleapiclient.discovery import build
-import streamlit_audiorecorder as st_audiorecorder # NUEVO COMPONENTE
 
-# --- 1. DATOS DE USUARIO ---
+# --- 1. DATOS DEL USUARIO ---
 TU_EMAIL_GMAIL = "juanjesusmartinsr@gmail.com"
 
 # --- 2. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Asistente Personal", page_icon="🟣", layout="wide")
+st.set_page_config(page_title="Asistente Personal",
+                   page_icon="🟣", layout="wide")
 
 st.markdown("""
 <style>
+    /* DERECHA */
     .stApp { background-color: #FAF5FF !important; color: #000000 !important; }
     .stMarkdown p, h1, h2, h3, div, span, li, label { color: #000000 !important; }
     [data-testid="stSidebar"] { background-color: #1a0b2e !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
+    /* INPUTS */
     .stTextInput > div > div > input { background-color: #FFFFFF !important; color: #000000 !important; border: 1px solid #D1C4E9 !important; }
     .stButton > button { background-color: #6A1B9A !important; color: white !important; border: none !important; }
+    /* CHAT */
     .stChatMessage { background-color: #FFFFFF !important; border: 1px solid #E1BEE7 !important; color: #000000 !important; }
-    /* Ajuste para el nuevo grabador */
-    [data-testid="stSidebar"] div.stAudioRecorder { padding-top: 10px; } 
+    /* Estilo para el input de audio */
+    [data-testid="stAudioInput"] { margin-bottom: 20px; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. FUNCIONES DE CONEXIÓN Y UTILIDAD ---
+# --- 3. FUNCIONES DE AUDIO Y LIMPIEZA ---
+
+
+def limpiar_texto_para_audio(texto):
+    # Quita asteriscos, guiones bajos, hashtags y links
+    t = re.sub(r'[*_#]', '', texto)
+    t = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', t)
+    return t
+
+
+def texto_a_audio(texto):
+    try:
+        if not texto or len(texto) < 2:
+            return None
+        limpio = limpiar_texto_para_audio(texto)
+        tts = gTTS(text=limpio, lang='es')
+        fp = io.BytesIO()
+        tts.write_to_fp(fp)
+        return fp
+    except:
+        return None
+
+# --- 4. FUNCIONES DE CONEXIÓN Y ALERTA ---
+
+
 def obtener_credenciales():
     try:
         json_text = st.secrets["GOOGLE_CREDENTIALS"]
         creds_dict = json.loads(json_text, strict=False)
-        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/calendar']
+        scope = [
+            'https://spreadsheets.google.com/feeds',
+            'https://www.googleapis.com/auth/drive',
+            'https://www.googleapis.com/auth/calendar'
+        ]
         return ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    except: return None
+    except:
+        return None
+
 
 def conectar_memoria(creds):
     try:
         client = gspread.authorize(creds)
         wb = client.open("Memoria_Asistente")
         return wb.sheet1, wb.worksheet("Perfil")
-    except: return None, None
+    except:
+        return None, None
+
 
 def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso, nota_alerta=""):
     try:
         service = build('calendar', 'v3', credentials=creds)
-        reminders = {'useDefault': False, 'overrides': [{'method': 'popup', 'minutes': 10}]} 
+        reminders = {'useDefault': False, 'overrides': [
+            {'method': 'popup', 'minutes': 10}]}
+
         description = f"Agendado por Asistente.\n{nota_alerta}"
         evento = {
             'summary': resumen,
             'description': description,
-            'start': {'dateTime': inicio_iso, 'timeZone': 'America/Lima'}, 
+            'start': {'dateTime': inicio_iso, 'timeZone': 'America/Lima'},
             'end': {'dateTime': fin_iso, 'timeZone': 'America/Lima'},
-            'reminders': reminders 
+            'reminders': reminders
         }
         creado = service.events().insert(calendarId=TU_EMAIL_GMAIL, body=evento).execute()
         return True, creado.get('htmlLink')
     except Exception as e:
         return False, str(e)
 
-# --- 4. FUNCIONES DE AUDIO ---
-def limpiar_texto_para_audio(texto):
-    t = re.sub(r'[*_#]', '', texto)
-    t = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', t)
-    return t
-
-def texto_a_audio(texto):
-    try:
-        if not texto or len(texto) < 2: return None
-        limpio = limpiar_texto_para_audio(texto)
-        tts = gTTS(text=limpio, lang='es')
-        fp = io.BytesIO()
-        tts.write_to_fp(fp)
-        return fp
-    except: return None
 
 # --- 5. CEREBRO Y AUTODETECCIÓN ---
 try:
@@ -86,6 +108,7 @@ try:
 except:
     st.error("Falta API Key")
     st.stop()
+
 
 @st.cache_data
 def detectar_modelo_real(key):
@@ -96,16 +119,21 @@ def detectar_modelo_real(key):
             data = response.json()
             for m in data.get('models', []):
                 if 'generateContent' in m.get('supportedGenerationMethods', []):
-                    return m['name'] 
-    except: pass
+                    return m['name']
+    except:
+        pass
     return "models/gemini-1.5-flash"
+
 
 modelo_activo = detectar_modelo_real(api_key)
 
+
 def get_hora_peru():
+    # Hora de Lima (UTC-5)
     return datetime.datetime.utcnow() - datetime.timedelta(hours=5)
 
-# --- 6. INICIALIZACIÓN ---
+
+# --- 6. INICIALIZACIÓN Y CARGA DE DATOS ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -128,27 +156,25 @@ if creds:
                     r_low = {k.lower(): v for k, v in r.items()}
                     msg = str(r_low.get("mensaje", "")).strip()
                     if msg:
-                        role = "user" if r_low.get("rol", "model").lower() == "user" else "model"
-                        st.session_state.messages.append({"role": role, "content": msg, "mode": "personal"})
-            except: pass
+                        role = "user" if r_low.get(
+                            "rol", "model").lower() == "user" else "model"
+                        st.session_state.messages.append(
+                            {"role": role, "content": msg, "mode": "personal"})
+            except:
+                pass
         if hoja_perfil:
             try:
                 vals = hoja_perfil.get_all_values()
                 for fila in vals:
                     perfil_texto += " ".join(fila) + "\n"
-            except: pass
+            except:
+                pass
 
-# --- 7. BARRA LATERAL (NUEVO MICRÓFONO) ---
+# --- 7. BARRA LATERAL Y UI ---
 with st.sidebar:
     st.header("Configuración")
-    # Micrófono reemplazado por la versión estable
-    audio_bytes = st_audiorecorder() 
-    
-    st.write("---")
-    
     modo = st.radio("Modo:", ["🟣 Asistente Personal", "✨ Gemini General"])
     st.write("---")
-    
     if estado_memoria == "Conectada":
         st.success("🧠 Memoria Conectada")
     else:
@@ -156,111 +182,108 @@ with st.sidebar:
 
 st.title("Tu Espacio")
 
-# Input de texto (permanece abajo)
+# --- 8. INPUT UNIFICADO (VOZ Y TEXTO) ---
+audio_wav = st.audio_input("🎙️ Toca para hablar")
 prompt_texto = st.chat_input("Escribe aquí...")
-
-# --- 8. LÓGICA DE DETECCIÓN DE INPUT ---
 input_usuario = None
 es_audio = False
 
 if prompt_texto:
     input_usuario = prompt_texto
-elif audio_bytes is not None:
-    # Se detectaron bytes de audio (el usuario terminó la grabación)
+elif audio_wav:
     es_audio = True
-    input_usuario = "🎤 [Transcribiendo...]" # Placeholder
+    input_usuario = "🎤 [Audio enviado]"
 
 if input_usuario:
-    # 1. Preparar el payload
-    contenido_usuario = []
-    
-    if es_audio:
-        # Modo Audio: Convertir bytes a base64
-        b64_audio = base64.b64encode(audio_bytes).decode('utf-8')
-        
-        sys_audio_inst = "Transcribe el audio EXACTAMENTE, luego procede con la respuesta. Si pides agendar, extrae JSON."
-        contenido_usuario = [
-            {"text": sys_audio_inst},
-            {"inline_data": {"mime_type": "audio/wav", "data": b64_audio}}
-        ]
-        
-    else:
-        # Modo Texto
-        contenido_usuario = [{"text": input_usuario}]
 
-    # 2. Mostrar mensaje de usuario
-    st.session_state.messages.append({"role": "user", "content": input_usuario, "mode": "personal"})
+    # Preparamos el mensaje para el historial (se mostrará)
+    st.session_state.messages.append(
+        {"role": "user", "content": input_usuario, "mode": "personal"})
     with st.chat_message("user", avatar="👤"):
         st.markdown(input_usuario)
 
-    # 3. Contexto y Variables
+    # --- 9. LÓGICA DE PROCESAMIENTO Y RESPUESTA ---
     es_personal = ("Asistente" in modo)
     tag_modo = "personal" if es_personal else "gemini"
     avatar_bot = "🟣" if es_personal else "✨"
     respuesta_texto = ""
-    
-    # Contexto para la IA
-    historial = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages[-40:]])
-    fecha_humana = get_hora_peru().strftime("%A %d de %B del %Y, %H:%M")
-    
-    if es_personal:
-        sys_context = f"""
-        INSTRUCCIONES: Eres un asistente personal leal. NO digas que eres IA.
-        TIEMPO EN LIMA: {fecha_humana}
-        PERFIL: {perfil_texto}
-        MEMORIA: {historial}
-        """
-    else:
-        sys_context = "Responde como Gemini."
 
-    # 4. LLamada a la API
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_activo}:generateContent?key={api_key}"
-        headers = {'Content-Type': 'application/json'}
-        
-        # Unimos contexto de sistema y el input real (audio o texto)
-        payload_parts = [{"text": sys_context}] + contenido_usuario[0]['parts'] if es_audio else contenido_usuario
-        payload = {"contents": [{"parts": payload_parts}]}
-        
-        resp = requests.post(url, headers=headers, data=json.dumps(payload))
-        
-        if resp.status_code == 200:
-            full_response = resp.json()['candidates'][0]['content']['parts'][0]['text']
-            
-            # Si fue audio, intentamos transcribir y separar respuesta (ya no usamos |||)
-            if es_audio:
-                 # Esta versión no tiene el delimitador, por lo que Gemini devuelve la respuesta + transcripción.
-                 # No podemos separarla limpiamente, así que la mostramos completa.
-                 # La transcripción se hace implícita.
-                 respuesta_texto = full_response
-            else:
-                 respuesta_texto = full_response
+    with st.spinner("Pensando..."):
+        # Contexto
+        historial = ""
+        for m in st.session_state.messages[-40:]:
+            historial += f"{m['role']}: {m['content']}\n"
 
+        hora_peru_str = get_hora_peru().strftime("%A %d de %B del %Y, %H:%M:%S")
+
+        if es_personal:
+            sys_context = f"""
+            INSTRUCCIONES: Eres un asistente personal leal. NO digas que eres IA.
+            HORA OFICIAL PERÚ (UTC-5): {hora_peru_str}
+            PERFIL USUARIO: {perfil_texto}
+            MEMORIA RECIENTE: {historial}
+            """
         else:
-            respuesta_texto = f"Error {resp.status_code}: {resp.text}"
-            
-    except Exception as e:
-        respuesta_texto = f"Error: {e}"
+            sys_context = "Responde como Gemini."
 
-    # 5. RESPUESTA FINAL
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_activo}:generateContent?key={api_key}"
+            headers = {'Content-Type': 'application/json'}
+
+            # --- CONSTRUCCIÓN DEL PAYLOAD CORREGIDO ---
+            if es_audio:
+                # Caso Audio: Multi-part (Instrucción de texto + Audio binario)
+                bytes_data = audio_wav.getvalue()
+                b64_audio = base64.b64encode(bytes_data).decode('utf-8')
+
+                payload_parts = [
+                    {"text": sys_context +
+                        "\n---\nTranscribe el audio EXACTAMENTE, luego procede con la respuesta."},
+                    {"inline_data": {"mime_type": "audio/wav", "data": b64_audio}}
+                ]
+                payload = {"contents": [{"parts": payload_parts}]}
+
+            else:
+                # Caso Texto: Single-part (Instrucción de texto + Texto del usuario)
+                payload_parts = [
+                    {"text": sys_context},
+                    {"text": "USUARIO: " + prompt_texto}
+                ]
+                payload = {"contents": [{"parts": payload_parts}]}
+
+            # Llamada a la API
+            resp = requests.post(url, headers=headers,
+                                 data=json.dumps(payload))
+
+            if resp.status_code == 200:
+                respuesta_texto = resp.json(
+                )['candidates'][0]['content']['parts'][0]['text']
+            else:
+                respuesta_texto = f"Error {resp.status_code}: {resp.text}"
+                if "quota" in resp.text:
+                    respuesta_texto += "\n(Puede ser un problema temporal de cuota de API.)"
+        except Exception as e:
+            respuesta_texto = f"Error inesperado: {e}"
+
+    # C. RESPUESTA FINAL
     with st.chat_message("assistant", avatar=avatar_bot):
         st.markdown(respuesta_texto)
-        
+
         # LOGICA DE AUDIO INTELIGENTE: (Solo responde con audio si se le habló con audio)
         if es_audio:
             audio_fp = texto_a_audio(respuesta_texto)
             if audio_fp:
                 st.audio(audio_fp, format='audio/mp3')
-            
-    # 6. GUARDAR EN MEMORIA Y SESIÓN
-    st.session_state.messages.append({"role": "model", "content": respuesta_texto, "mode": tag_modo})
-    
-    if hoja_chat:
-        try:
-            timestamp = get_hora_peru().strftime("%Y-%m-%d %H:%M:%S")
-            # Guardamos la transcripción o el texto plano
-            guardar_input = "[Audio Transcrito]" if es_audio else input_usuario
-            hoja_chat.append_row([timestamp, "user", guardar_input]) 
-            hoja_chat.append_row([timestamp, "assistant", respuesta_texto])
-        except: pass
-# FINAL FIX
+
+        st.session_state.messages.append(
+            {"role": "model", "content": respuesta_texto, "mode": tag_modo})
+
+        # D. GUARDAR EN MEMORIA
+        if hoja_chat:
+            try:
+                timestamp = get_hora_peru().strftime("%Y-%m-%d %H:%M:%S")
+                # Guardamos el mensaje que se mostró en el historial
+                hoja_chat.append_row([timestamp, "user", input_usuario])
+                hoja_chat.append_row([timestamp, "assistant", respuesta_texto])
+            except:
+                pass
