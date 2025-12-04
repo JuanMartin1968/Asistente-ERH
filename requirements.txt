@@ -4,5 +4,4 @@ gspread
 oauth2client
 google-api-python-client
 gTTS
-streamlit-audiorecorder
-# Version 1.0.3
+streamlit-audiorecorder==0.0.9
