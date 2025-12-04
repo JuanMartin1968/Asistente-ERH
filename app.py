@@ -263,3 +263,4 @@ if input_usuario:
             hoja_chat.append_row([timestamp, "user", guardar_input]) 
             hoja_chat.append_row([timestamp, "assistant", respuesta_texto])
         except: pass
+# FINAL FIX
