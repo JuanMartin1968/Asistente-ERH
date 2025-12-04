@@ -73,7 +73,6 @@ def conectar_memoria(creds):
 def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso, nota_alerta=""):
     try:
         service = build('calendar', 'v3', credentials=creds)
-        # Intentamos el override, aunque Google suele imponer el default
         reminders = {'useDefault': False, 'overrides': [{'method': 'popup', 'minutes': 10}]}
         
         description = f"Agendado por Asistente.\n{nota_alerta}"
@@ -112,6 +111,7 @@ def detectar_modelo_real(key):
 modelo_activo = detectar_modelo_real(api_key)
 
 def get_hora_peru():
+    # Hora de Lima (UTC-5)
     return datetime.datetime.utcnow() - datetime.timedelta(hours=5)
 
 # --- 6. INICIALIZACIÓN Y CARGA DE DATOS ---
@@ -169,76 +169,74 @@ if prompt_texto:
     input_usuario = prompt_texto
 elif audio_wav:
     es_audio = True
-    input_usuario = "Procesando Audio..." 
+    input_usuario = "🎤 [Audio enviado]" 
 
 if input_usuario:
-    # Preparar el payload para la IA
-    contenido_usuario = []
     
-    if es_audio:
-        # Modo Audio: Base64 encoding
-        bytes_data = audio_wav.getvalue()
-        b64_audio = base64.b64encode(bytes_data).decode('utf-8')
-        
-        # Enviamos el audio + instrucción de transcripción
-        sys_audio_inst = "Transcribe el audio EXACTAMENTE, luego procede con la respuesta. Si pides agendar, extrae JSON."
-        contenido_usuario = [
-            {"text": sys_audio_inst},
-            {"inline_data": {"mime_type": "audio/wav", "data": b64_audio}}
-        ]
-        # Para que el historial muestre el audio
-        st.session_state.messages.append({"role": "user", "content": "🎤 [Audio enviado]", "mode": "personal"})
-    else:
-        contenido_usuario = [{"text": input_usuario}]
-        st.session_state.messages.append({"role": "user", "content": input_usuario, "mode": "personal"})
-
-    # Muestra el mensaje del usuario en la interfaz
+    # Preparamos el mensaje para el historial (se mostrará)
+    st.session_state.messages.append({"role": "user", "content": input_usuario, "mode": "personal"})
     with st.chat_message("user", avatar="👤"):
         st.markdown(input_usuario)
-
 
     # --- 9. LÓGICA DE PROCESAMIENTO Y RESPUESTA ---
     es_personal = ("Asistente" in modo)
     tag_modo = "personal" if es_personal else "gemini"
     avatar_bot = "🟣" if es_personal else "✨"
     respuesta_texto = ""
-    evento_creado = False
-
-    # A. Análisis de Agenda (Prioridad)
-    # Lógica de agenda aquí...
-    # (Omitida por brevedad en este ejemplo, pero se integraría aquí)
-
-    # B. RESPUESTA NORMAL (Conversacional)
-    historial = ""
-    for m in st.session_state.messages[-40:]:
-        historial += f"{m['role']}: {m['content']}\n"
     
-    fecha_humana = get_hora_peru().strftime("%A %d de %B del %Y, %H:%M")
-    
-    if es_personal:
-        final = f"""
-        INSTRUCCIONES: Eres un asistente personal leal.
-        TIEMPO EN LIMA: {fecha_humana}
-        PERFIL: {perfil_texto}
-        MEMORIA: {historial}
-        """
-    else:
-        final = f"Responde como Gemini.\n\nUsuario: {prompt_texto}" # Usar prompt_texto original si es texto
-
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_activo}:generateContent?key={api_key}"
-        headers = {'Content-Type': 'application/json'}
-        # Payload: Sistema + Input (Audio o Texto)
-        payload = { "contents": [{"parts": [{"text": final}] + contenido_usuario[0]['parts'] if es_audio else contenido_usuario }]}
+    with st.spinner("Pensando..."):
+        # Contexto
+        historial = ""
+        for m in st.session_state.messages[-40:]:
+            historial += f"{m['role']}: {m['content']}\n"
         
-        resp = requests.post(url, headers=headers, data=json.dumps(payload))
+        hora_peru_str = get_hora_peru().strftime("%A %d de %B del %Y, %H:%M:%S")
         
-        if resp.status_code == 200:
-            respuesta_texto = resp.json()['candidates'][0]['content']['parts'][0]['text']
+        if es_personal:
+            sys_context = f"""
+            INSTRUCCIONES: Eres un asistente personal leal. NO digas que eres IA.
+            HORA OFICIAL PERÚ (UTC-5): {hora_peru_str}
+            PERFIL USUARIO: {perfil_texto}
+            MEMORIA RECIENTE: {historial}
+            """
         else:
-            respuesta_texto = f"Error {resp.status_code}: {resp.text}"
-    except Exception as e:
-        respuesta_texto = f"Error: {e}"
+            sys_context = "Responde como Gemini."
+
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_activo}:generateContent?key={api_key}"
+            headers = {'Content-Type': 'application/json'}
+            
+            # --- CONSTRUCCIÓN DEL PAYLOAD CORREGIDO ---
+            if es_audio:
+                # Caso Audio: Multi-part (Instrucción de texto + Audio binario)
+                bytes_data = audio_wav.getvalue()
+                b64_audio = base64.b64encode(bytes_data).decode('utf-8')
+                
+                payload_parts = [
+                    {"text": sys_context + "\n---\nTranscribe el audio EXACTAMENTE, luego procede con la respuesta."},
+                    {"inline_data": {"mime_type": "audio/wav", "data": b64_audio}}
+                ]
+                payload = {"contents": [{"parts": payload_parts}]}
+                
+            else:
+                # Caso Texto: Single-part (Instrucción de texto + Texto del usuario)
+                payload_parts = [
+                    {"text": sys_context},
+                    {"text": "USUARIO: " + prompt_texto}
+                ]
+                payload = {"contents": [{"parts": payload_parts}]}
+
+            # Llamada a la API
+            resp = requests.post(url, headers=headers, data=json.dumps(payload))
+            
+            if resp.status_code == 200:
+                respuesta_texto = resp.json()['candidates'][0]['content']['parts'][0]['text']
+            else:
+                respuesta_texto = f"Error {resp.status_code}: {resp.text}"
+                if "quota" in resp.text:
+                    respuesta_texto += "\n(Puede ser un problema temporal de cuota de API.)"
+        except Exception as e:
+            respuesta_texto = f"Error inesperado: {e}"
 
     # C. RESPUESTA FINAL
     with st.chat_message("assistant", avatar=avatar_bot):
@@ -256,7 +254,7 @@ if input_usuario:
         if hoja_chat:
             try:
                 timestamp = get_hora_peru().strftime("%Y-%m-%d %H:%M:%S")
-                # Guardamos el mensaje que se mostró en el historial (transcrito/escrito)
+                # Guardamos el mensaje que se mostró en el historial
                 hoja_chat.append_row([timestamp, "user", input_usuario]) 
                 hoja_chat.append_row([timestamp, "assistant", respuesta_texto])
             except: pass
