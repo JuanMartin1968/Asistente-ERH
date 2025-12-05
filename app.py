@@ -149,6 +149,30 @@ if creds:
         hoja_perfil = h2
         estado_memoria = "Conectada"
         # Cargar Chat y Perfil
+
+          if not st.session_state.messages:
+            try:
+                # Lectura robusta: Leemos todo como texto plano
+                todas_las_filas = hoja_chat.get_all_values()
+                
+                # Si hay datos (más de 1 fila de títulos)
+                if len(todas_las_filas) > 1:
+                    # Tomamos los últimos 40 mensajes (saltando la fila 1 de títulos)
+                    for fila in todas_las_filas[1:][-40:]:
+                        # Verificamos que la fila tenga al menos 3 columnas (A, B, C)
+                        if len(fila) >= 3:
+                            # Columna B es el ROL, Columna C es el MENSAJE
+                            rol_leido = fila[1].strip()
+                            msg_leido = fila[2].strip()
+                            
+                            if msg_leido:
+                                # Normalizamos el rol para Streamlit
+                                role = "user" if rol_leido.lower() == "user" else "assistant"
+                                st.session_state.messages.append(
+                                    {"role": role, "content": msg_leido, "mode": "personal"})
+            except Exception as e:
+                st.error(f"Error recuperando historial: {e}")
+      
         if not st.session_state.messages:
             try:
                 registros = hoja_chat.get_all_records()
@@ -338,6 +362,7 @@ if input_usuario:
                 hoja_chat.append_row([timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
