@@ -222,10 +222,13 @@ if input_usuario:
             HORA OFICIAL PERÚ (UTC-5): {hora_peru_str}
             PERFIL USUARIO: {perfil_texto}
             MEMORIA RECIENTE: {historial}
+
+            HERRAMIENTAS:
+            - Para agendar en Google Calendar, responde SOLAMENTE con este formato en una línea nueva al final:
+            CALENDAR_CMD: Título | YYYY-MM-DD HH:MM | YYYY-MM-DD HH:MM | Nota
             """
         else:
             sys_context = "Responde como Gemini."
-
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_activo}:generateContent?key={api_key}"
             headers = {'Content-Type': 'application/json'}
@@ -265,6 +268,20 @@ if input_usuario:
         except Exception as e:
             respuesta_texto = f"Error inesperado: {e}"
 
+# --- LOGICA CALENDARIO ---
+    if "CALENDAR_CMD:" in respuesta_texto:
+        try:
+            parts = respuesta_texto.split("CALENDAR_CMD:")
+            respuesta_texto = parts[0].strip() # Muestra solo el texto normal
+            datos = parts[1].strip().split("|")
+            if len(datos) >= 3:
+                resumen, ini, fin = datos[0].strip(), datos[1].strip(), datos[2].strip()
+                nota = datos[3].strip() if len(datos) > 3 else ""
+                ok, link = crear_evento_calendario(creds, resumen, ini, fin, nota)
+                respuesta_texto += f"\n\n{'✅ Evento creado' if ok else '❌ Error'}: {link}"
+        except:
+            pass
+  
     # C. RESPUESTA FINAL
     with st.chat_message("assistant", avatar=avatar_bot):
         st.markdown(respuesta_texto)
@@ -287,3 +304,4 @@ if input_usuario:
                 hoja_chat.append_row([timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
