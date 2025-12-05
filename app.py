@@ -295,7 +295,7 @@ if input_usuario:
         except:
             pass
 
-# --- LOGICA MEMORIA (PERFIL) ---
+# --- LOGICA MEMORIA (PERFIL) CON FECHA ---
     if "MEMORIA_CMD:" in respuesta_texto:
         try:
             parts = respuesta_texto.split("MEMORIA_CMD:")
@@ -303,7 +303,8 @@ if input_usuario:
             dato_nuevo = parts[1].strip()
             
             if hoja_perfil:
-                hoja_perfil.append_row([dato_nuevo])
+                timestamp = get_hora_peru().strftime("%Y-%m-%d %H:%M:%S")
+                hoja_perfil.append_row([timestamp, dato_nuevo])
                 respuesta_texto += "\n(💾 Guardado en perfil)"
         except:
             pass
@@ -330,6 +331,7 @@ if input_usuario:
                 hoja_chat.append_row([timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
