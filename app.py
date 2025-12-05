@@ -19,16 +19,25 @@ st.set_page_config(page_title="Asistente Personal",
 
 st.markdown("""
 <style>
-    /* DERECHA */
+    /* DERECHA (Panel Principal) */
     .stApp { background-color: #FAF5FF !important; color: #000000 !important; }
     .stMarkdown p, h1, h2, h3, div, span, li, label { color: #000000 !important; }
+    
+    /* BARRA LATERAL (Izquierda) */
     [data-testid="stSidebar"] { background-color: #1a0b2e !important; }
+    /* Texto general blanco */
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
+    
+    /* EXCEPCIÓN: Botón "Browse files" (letras negras para que se vea) */
+    [data-testid="stFileUploader"] button { color: #000000 !important; }
+    
     /* INPUTS */
     .stTextInput > div > div > input { background-color: #FFFFFF !important; color: #000000 !important; border: 1px solid #D1C4E9 !important; }
     .stButton > button { background-color: #6A1B9A !important; color: white !important; border: none !important; }
+    
     /* CHAT */
     .stChatMessage { background-color: #FFFFFF !important; border: 1px solid #E1BEE7 !important; color: #000000 !important; }
+    
     /* Estilo para el input de audio */
     [data-testid="stAudioInput"] { margin-bottom: 20px; }
 </style>
@@ -419,6 +428,7 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
