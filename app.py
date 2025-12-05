@@ -136,7 +136,9 @@ def get_hora_peru():
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "id_conv_actual" not in st.session_state:
-    st.session_state.id_conv_actual = None # Empezamos sin ID definido
+    st.session_state.id_conv_actual = None
+if "num_mensajes" not in st.session_state:
+    st.session_state.num_mensajes = 40 # Recuperamos el contador
 
 creds = obtener_credenciales()
 hoja_chat, hoja_perfil = None, None
@@ -155,26 +157,33 @@ if creds:
             try:
                 todas_las_filas = hoja_chat.get_all_values()
                 if len(todas_las_filas) > 1:
-                    # Detectar IDs existentes
+                    # 1. Detectar IDs existentes
                     ids_existentes = sorted(list(set(f[0] for f in todas_las_filas[1:] if f[0].strip().isdigit())), key=int)
                     
-                    # Si no hemos elegido ninguna (arranque), vamos a la última
                     if st.session_state.id_conv_actual is None:
                         if ids_existentes:
                             st.session_state.id_conv_actual = ids_existentes[-1]
                         else:
                             st.session_state.id_conv_actual = "1"
                     
-                    # Cargar mensajes del ID seleccionado
                     target_id = str(st.session_state.id_conv_actual)
+                    
+                    # 2. FILTRAR primero solo las filas de esta conversación
+                    filas_de_esta_conv = []
                     for fila in todas_las_filas[1:]:
                         if len(fila) >= 4 and fila[0] == target_id:
-                            rol_leido = fila[2].strip()
-                            msg_leido = fila[3].strip()
-                            if msg_leido:
-                                role = "user" if rol_leido.lower() == "user" else "assistant"
-                                st.session_state.messages.append(
-                                    {"role": role, "content": msg_leido, "mode": "personal"})
+                            filas_de_esta_conv.append(fila)
+                            
+                    # 3. APLICAR EL LÍMITE (Cargar solo los últimos 'num_mensajes')
+                    limite = st.session_state.num_mensajes
+                    for fila in filas_de_esta_conv[-limite:]:
+                        rol_leido = fila[2].strip()
+                        msg_leido = fila[3].strip()
+                        if msg_leido:
+                            role = "user" if rol_leido.lower() == "user" else "assistant"
+                            st.session_state.messages.append(
+                                {"role": role, "content": msg_leido, "mode": "personal"})
+
             except Exception as e:
                 st.error(f"Error recuperando historial: {e}")
                 
@@ -407,6 +416,7 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
