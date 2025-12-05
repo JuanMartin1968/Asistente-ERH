@@ -332,27 +332,37 @@ if input_usuario:
             url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_activo}:generateContent?key={api_key}"
             headers = {'Content-Type': 'application/json'}
 
-            # --- CONSTRUCCIÓN DEL PAYLOAD CORREGIDO ---
+            # --- CONSTRUCCIÓN DEL PAYLOAD (CON IMAGEN) ---
+            payload_parts = [{"text": sys_context}]
+
+            # 1. Agregar Imagen (si existe)
+            if uploaded_file is not None:
+                bytes_img = uploaded_file.getvalue()
+                b64_img = base64.b64encode(bytes_img).decode('utf-8')
+                payload_parts.append({
+                    "inline_data": {
+                        "mime_type": uploaded_file.type,
+                        "data": b64_img
+                    }
+                })
+                payload_parts.append({"text": "\n(El usuario adjuntó una imagen. Úsala si es relevante)."})
+
+            # 2. Agregar Audio o Texto
             if es_audio:
-                # Caso Audio: Multi-part (Instrucción de texto + Audio binario)
-                bytes_data = audio_wav.getvalue()
-                b64_audio = base64.b64encode(bytes_data).decode('utf-8')
-
-                payload_parts = [
-                    {"text": sys_context +
-                        "\n---\nTranscribe el audio EXACTAMENTE, luego procede con la respuesta."},
-                    {"inline_data": {"mime_type": "audio/wav", "data": b64_audio}}
-                ]
-                payload = {"contents": [{"parts": payload_parts}]}
-
+                bytes_audio = audio_wav.getvalue()
+                b64_audio = base64.b64encode(bytes_audio).decode('utf-8')
+                payload_parts.append({
+                    "inline_data": {
+                        "mime_type": "audio/wav",
+                        "data": b64_audio
+                    }
+                })
+                payload_parts.append({"text": "\n---\nTranscribe el audio y responde."})
             else:
-                # Caso Texto: Single-part (Instrucción de texto + Texto del usuario)
-                payload_parts = [
-                    {"text": sys_context},
-                    {"text": "USUARIO: " + prompt_texto}
-                ]
-                payload = {"contents": [{"parts": payload_parts}]}
+                payload_parts.append({"text": "USUARIO: " + prompt_texto})
 
+            payload = {"contents": [{"parts": payload_parts}]}
+          
             # Llamada a la API
             resp = requests.post(url, headers=headers,
                                  data=json.dumps(payload))
@@ -428,6 +438,7 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
