@@ -135,8 +135,8 @@ def get_hora_peru():
 # --- 6. INICIALIZACIÓN Y CARGA DE DATOS ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "num_mensajes" not in st.session_state:
-    st.session_state.num_mensajes = 40  # Cantidad inicial de mensajes a cargar
+if "id_conv_actual" not in st.session_state:
+    st.session_state.id_conv_actual = "1" # Por defecto
 
 creds = obtener_credenciales()
 hoja_chat, hoja_perfil = None, None
@@ -150,17 +150,25 @@ if creds:
         hoja_perfil = h2
         estado_memoria = "Conectada"
         
-        # Cargar Chat
+        # Cargar Chat de la conversación actual
         if not st.session_state.messages:
             try:
                 todas_las_filas = hoja_chat.get_all_values()
                 if len(todas_las_filas) > 1:
-                    limite = st.session_state.num_mensajes
-                    # Usamos el límite variable
-                    for fila in todas_las_filas[1:][-limite:]:
-                        if len(fila) >= 3:
-                            rol_leido = fila[1].strip()
-                            msg_leido = fila[2].strip()
+                    # 1. Detectar IDs únicos y buscar el último
+                    ids_existentes = sorted(list(set(f[0] for f in todas_las_filas[1:] if f[0].strip().isdigit())), key=int)
+                    if ids_existentes:
+                        ultimo_id = ids_existentes[-1]
+                        st.session_state.id_conv_actual = ultimo_id
+                    
+                    # 2. Cargar mensajes SOLO de ese ID
+                    target_id = st.session_state.id_conv_actual
+                    for fila in todas_las_filas[1:]:
+                        # Ahora leemos 4 columnas: ID (0), Fecha (1), Rol (2), Mensaje (3)
+                        if len(fila) >= 4 and fila[0] == target_id:
+                            rol_leido = fila[2].strip() # Rol está en C
+                            msg_leido = fila[3].strip() # Mensaje está en D
+                            
                             if msg_leido:
                                 role = "user" if rol_leido.lower() == "user" else "assistant"
                                 st.session_state.messages.append(
@@ -351,4 +359,5 @@ if input_usuario:
                 hoja_chat.append_row([timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
