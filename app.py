@@ -136,7 +136,7 @@ def get_hora_peru():
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "id_conv_actual" not in st.session_state:
-    st.session_state.id_conv_actual = "1" # Por defecto
+    st.session_state.id_conv_actual = None # Empezamos sin ID definido
 
 creds = obtener_credenciales()
 hoja_chat, hoja_perfil = None, None
@@ -150,25 +150,27 @@ if creds:
         hoja_perfil = h2
         estado_memoria = "Conectada"
         
-        # Cargar Chat de la conversación actual
+        # Cargar Chat
         if not st.session_state.messages:
             try:
                 todas_las_filas = hoja_chat.get_all_values()
                 if len(todas_las_filas) > 1:
-                    # 1. Detectar IDs únicos y buscar el último
+                    # Detectar IDs existentes
                     ids_existentes = sorted(list(set(f[0] for f in todas_las_filas[1:] if f[0].strip().isdigit())), key=int)
-                    if ids_existentes:
-                        ultimo_id = ids_existentes[-1]
-                        st.session_state.id_conv_actual = ultimo_id
                     
-                    # 2. Cargar mensajes SOLO de ese ID
-                    target_id = st.session_state.id_conv_actual
+                    # Si no hemos elegido ninguna (arranque), vamos a la última
+                    if st.session_state.id_conv_actual is None:
+                        if ids_existentes:
+                            st.session_state.id_conv_actual = ids_existentes[-1]
+                        else:
+                            st.session_state.id_conv_actual = "1"
+                    
+                    # Cargar mensajes del ID seleccionado
+                    target_id = str(st.session_state.id_conv_actual)
                     for fila in todas_las_filas[1:]:
-                        # Ahora leemos 4 columnas: ID (0), Fecha (1), Rol (2), Mensaje (3)
                         if len(fila) >= 4 and fila[0] == target_id:
-                            rol_leido = fila[2].strip() # Rol está en C
-                            msg_leido = fila[3].strip() # Mensaje está en D
-                            
+                            rol_leido = fila[2].strip()
+                            msg_leido = fila[3].strip()
                             if msg_leido:
                                 role = "user" if rol_leido.lower() == "user" else "assistant"
                                 st.session_state.messages.append(
@@ -189,17 +191,51 @@ if creds:
 with st.sidebar:
     st.header("Configuración")
     modo = st.radio("Modo:", ["🟣 Asistente Personal", "✨ Gemini General"])
+    
     st.write("---")
-    if estado_memoria == "Conectada":
-        st.success("🧠 Memoria Conectada")
-    else:
-        st.error("⚠️ Memoria Desconectada")
+    st.header("🗂️ Conversaciones")
+    
+    # Lógica para listar IDs disponibles
+    lista_ids = ["1"]
+    if hoja_chat:
+        try:
+            raw_data = hoja_chat.get_all_values()
+            encontrados = sorted(list(set(f[0] for f in raw_data[1:] if f[0].strip().isdigit())), key=int)
+            if encontrados:
+                lista_ids = encontrados
+        except:
+            pass
+
+    # Mostrar ID actual
+    actual = str(st.session_state.id_conv_actual) if st.session_state.id_conv_actual else lista_ids[-1]
+    
+    # 1. Selector de Conversación
+    # Usamos un truco: si cambiamos el selectbox, actualizamos el estado
+    id_seleccionado = st.selectbox(
+        "Elige una conversación:", 
+        options=lista_ids, 
+        index=lista_ids.index(actual) if actual in lista_ids else 0
+    )
+
+    if id_seleccionado != actual:
+        st.session_state.id_conv_actual = id_seleccionado
+        st.session_state.messages = [] # Limpiar para recargar la elegida
+        st.rerun()
+
+    # 2. Botón Nueva Conversación
+    if st.button("➕ Nueva Conversación"):
+        # Calculamos el siguiente ID
+        ultimo = int(lista_ids[-1])
+        nuevo = str(ultimo + 1)
+        st.session_state.id_conv_actual = nuevo
+        st.session_state.messages = [] # Limpiar para empezar en blanco
+        st.rerun()
 
     st.write("---")
-    if st.button("🔄 Cargar más antiguos"):
-        st.session_state.num_mensajes += 40
-        st.session_state.messages = []  # Borramos para forzar la recarga
-        st.rerun()
+    if estado_memoria == "Conectada":
+        st.success(f"🧠 Memoria: Conv. {st.session_state.id_conv_actual}")
+    else:
+        st.error("⚠️ Memoria Desconectada")
 
 st.title("Tu Espacio")
 
@@ -361,3 +397,4 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
