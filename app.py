@@ -350,14 +350,14 @@ if input_usuario:
         st.session_state.messages.append(
             {"role": "model", "content": respuesta_texto, "mode": tag_modo})
 
-        # D. GUARDAR EN MEMORIA
+# D. GUARDAR EN MEMORIA
         if hoja_chat:
             try:
                 timestamp = get_hora_peru().strftime("%Y-%m-%d %H:%M:%S")
-                # Guardamos el mensaje que se mostró en el historial
-                hoja_chat.append_row([timestamp, "user", input_usuario])
-                hoja_chat.append_row([timestamp, "assistant", respuesta_texto])
+                id_actual = st.session_state.id_conv_actual
+                
+                # Guardamos 4 columnas: ID, Fecha, Rol, Mensaje
+                hoja_chat.append_row([id_actual, timestamp, "user", input_usuario])
+                hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
-
-
