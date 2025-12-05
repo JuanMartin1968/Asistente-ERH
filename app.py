@@ -206,11 +206,9 @@ with st.sidebar:
         except:
             pass
 
-    # 2. Determinar ID actual (Prioridad: Sesión > Último de la hoja)
+    # 2. Determinar ID actual
     actual = str(st.session_state.id_conv_actual) if st.session_state.id_conv_actual else lista_ids[-1]
 
-    # --- CORRECCIÓN CLAVE ---
-    # Si el ID actual es nuevo (aún no guardado), lo agregamos visualmente a la lista
     if actual not in lista_ids:
         lista_ids.append(actual)
     
@@ -223,16 +221,23 @@ with st.sidebar:
 
     if id_seleccionado != actual:
         st.session_state.id_conv_actual = id_seleccionado
-        st.session_state.num_mensajes = 40  # <--- ESTA ES LA LÍNEA NUEVA
+        st.session_state.num_mensajes = 40 # Resetea vista al cambiar
         st.session_state.messages = [] 
         st.rerun()
 
     # 4. Botón Nueva Conversación
     if st.button("➕ Nueva Conversación"):
-        # Calculamos el siguiente ID basándonos en el mayor que exista (en hoja o actual)
         max_id = int(lista_ids[-1]) 
         nuevo = str(max_id + 1)
         st.session_state.id_conv_actual = nuevo
+        st.session_state.num_mensajes = 40 # Resetea vista al crear
+        st.session_state.messages = [] 
+        st.rerun()
+
+    # 5. Botón Cargar Más (RECUPERADO)
+    st.write("---")
+    if st.button("🔄 Cargar más antiguos"):
+        st.session_state.num_mensajes += 40
         st.session_state.messages = [] 
         st.rerun()
 
@@ -402,6 +407,7 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
