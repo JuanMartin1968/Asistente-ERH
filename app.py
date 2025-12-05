@@ -132,10 +132,11 @@ def get_hora_peru():
     # Hora de Lima (UTC-5)
     return datetime.datetime.utcnow() - datetime.timedelta(hours=5)
 
-
 # --- 6. INICIALIZACIÓN Y CARGA DE DATOS ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "num_mensajes" not in st.session_state:
+    st.session_state.num_mensajes = 40  # Cantidad inicial de mensajes a cargar
 
 creds = obtener_credenciales()
 hoja_chat, hoja_perfil = None, None
@@ -148,44 +149,26 @@ if creds:
         hoja_chat = h1
         hoja_perfil = h2
         estado_memoria = "Conectada"
-        # Cargar Chat y Perfil
-
+        
+        # Cargar Chat
         if not st.session_state.messages:
             try:
-                # Lectura robusta: Leemos todo como texto plano
                 todas_las_filas = hoja_chat.get_all_values()
-                
-                # Si hay datos (más de 1 fila de títulos)
                 if len(todas_las_filas) > 1:
-                    # Tomamos los últimos 40 mensajes (saltando la fila 1 de títulos)
-                    for fila in todas_las_filas[1:][-40:]:
-                        # Verificamos que la fila tenga al menos 3 columnas (A, B, C)
+                    limite = st.session_state.num_mensajes
+                    # Usamos el límite variable
+                    for fila in todas_las_filas[1:][-limite:]:
                         if len(fila) >= 3:
-                            # Columna B es el ROL, Columna C es el MENSAJE
                             rol_leido = fila[1].strip()
                             msg_leido = fila[2].strip()
-                            
                             if msg_leido:
-                                # Normalizamos el rol para Streamlit
                                 role = "user" if rol_leido.lower() == "user" else "assistant"
                                 st.session_state.messages.append(
                                     {"role": role, "content": msg_leido, "mode": "personal"})
             except Exception as e:
                 st.error(f"Error recuperando historial: {e}")
-      
-        if not st.session_state.messages:
-            try:
-                registros = hoja_chat.get_all_records()
-                for r in registros[-40:]:
-                    r_low = {k.lower(): v for k, v in r.items()}
-                    msg = str(r_low.get("mensaje", "")).strip()
-                    if msg:
-                        role = "user" if r_low.get(
-                            "rol", "model").lower() == "user" else "model"
-                        st.session_state.messages.append(
-                            {"role": role, "content": msg, "mode": "personal"})
-            except:
-                pass
+                
+        # Cargar Perfil
         if hoja_perfil:
             try:
                 vals = hoja_perfil.get_all_values()
@@ -362,11 +345,3 @@ if input_usuario:
                 hoja_chat.append_row([timestamp, "assistant", respuesta_texto])
             except:
                 pass
-
-
-
-
-
-
-
-
