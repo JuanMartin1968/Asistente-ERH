@@ -200,6 +200,9 @@ if creds:
 with st.sidebar:
     st.header("Configuración")
     modo = st.radio("Modo:", ["🟣 Asistente Personal", "✨ Gemini General"])
+
+    st.write("---")
+    uploaded_file = st.file_uploader("📸 Subir imagen", type=["png", "jpg", "jpeg"])
     
     st.write("---")
     st.header("🗂️ Conversaciones")
@@ -416,6 +419,7 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
