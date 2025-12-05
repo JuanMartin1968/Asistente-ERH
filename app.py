@@ -224,11 +224,15 @@ if input_usuario:
             MEMORIA RECIENTE: {historial}
 
             HERRAMIENTAS:
-            - Para agendar en Google Calendar, responde SOLAMENTE con este formato en una línea nueva al final:
+            - Para agendar en Google Calendar, usa este formato en una línea nueva al final:
             CALENDAR_CMD: Título | YYYY-MM-DD HH:MM | YYYY-MM-DD HH:MM | Nota
+
+            - Para GUARDAR información importante en el Perfil, usa este formato en una línea nueva al final:
+            MEMORIA_CMD: Dato a guardar
             """
         else:
             sys_context = "Responde como Gemini."
+
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_activo}:generateContent?key={api_key}"
             headers = {'Content-Type': 'application/json'}
@@ -290,6 +294,19 @@ if input_usuario:
                 respuesta_texto += f"\n\n{'✅ Evento creado' if ok else '❌ Error'}: {link}"
         except:
             pass
+
+# --- LOGICA MEMORIA (PERFIL) ---
+    if "MEMORIA_CMD:" in respuesta_texto:
+        try:
+            parts = respuesta_texto.split("MEMORIA_CMD:")
+            respuesta_texto = parts[0].strip()
+            dato_nuevo = parts[1].strip()
+            
+            if hoja_perfil:
+                hoja_perfil.append_row([dato_nuevo])
+                respuesta_texto += "\n(💾 Guardado en perfil)"
+        except:
+            pass
   
     # C. RESPUESTA FINAL
     with st.chat_message("assistant", avatar=avatar_bot):
@@ -313,6 +330,7 @@ if input_usuario:
                 hoja_chat.append_row([timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
