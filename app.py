@@ -223,6 +223,7 @@ with st.sidebar:
 
     if id_seleccionado != actual:
         st.session_state.id_conv_actual = id_seleccionado
+        st.session_state.num_mensajes = 40  # <--- ESTA ES LA LÍNEA NUEVA
         st.session_state.messages = [] 
         st.rerun()
 
@@ -401,5 +402,6 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
