@@ -187,6 +187,12 @@ with st.sidebar:
     else:
         st.error("⚠️ Memoria Desconectada")
 
+    st.write("---")
+    if st.button("🔄 Cargar más antiguos"):
+        st.session_state.num_mensajes += 40
+        st.session_state.messages = []  # Borramos para forzar la recarga
+        st.rerun()
+
 st.title("Tu Espacio")
 
 # --- MOSTRAR HISTORIAL ---
@@ -345,3 +351,4 @@ if input_usuario:
                 hoja_chat.append_row([timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
