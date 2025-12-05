@@ -150,7 +150,7 @@ if creds:
         estado_memoria = "Conectada"
         # Cargar Chat y Perfil
 
-          if not st.session_state.messages:
+        if not st.session_state.messages:
             try:
                 # Lectura robusta: Leemos todo como texto plano
                 todas_las_filas = hoja_chat.get_all_values()
@@ -362,6 +362,7 @@ if input_usuario:
                 hoja_chat.append_row([timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
