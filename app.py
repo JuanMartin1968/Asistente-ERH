@@ -195,7 +195,7 @@ with st.sidebar:
     st.write("---")
     st.header("🗂️ Conversaciones")
     
-    # Lógica para listar IDs disponibles
+    # 1. Leer IDs desde la hoja
     lista_ids = ["1"]
     if hoja_chat:
         try:
@@ -206,29 +206,33 @@ with st.sidebar:
         except:
             pass
 
-    # Mostrar ID actual
+    # 2. Determinar ID actual (Prioridad: Sesión > Último de la hoja)
     actual = str(st.session_state.id_conv_actual) if st.session_state.id_conv_actual else lista_ids[-1]
+
+    # --- CORRECCIÓN CLAVE ---
+    # Si el ID actual es nuevo (aún no guardado), lo agregamos visualmente a la lista
+    if actual not in lista_ids:
+        lista_ids.append(actual)
     
-    # 1. Selector de Conversación
-    # Usamos un truco: si cambiamos el selectbox, actualizamos el estado
+    # 3. Selector
     id_seleccionado = st.selectbox(
         "Elige una conversación:", 
         options=lista_ids, 
-        index=lista_ids.index(actual) if actual in lista_ids else 0
+        index=lista_ids.index(actual)
     )
 
     if id_seleccionado != actual:
         st.session_state.id_conv_actual = id_seleccionado
-        st.session_state.messages = [] # Limpiar para recargar la elegida
+        st.session_state.messages = [] 
         st.rerun()
 
-    # 2. Botón Nueva Conversación
+    # 4. Botón Nueva Conversación
     if st.button("➕ Nueva Conversación"):
-        # Calculamos el siguiente ID
-        ultimo = int(lista_ids[-1])
-        nuevo = str(ultimo + 1)
+        # Calculamos el siguiente ID basándonos en el mayor que exista (en hoja o actual)
+        max_id = int(lista_ids[-1]) 
+        nuevo = str(max_id + 1)
         st.session_state.id_conv_actual = nuevo
-        st.session_state.messages = [] # Limpiar para empezar en blanco
+        st.session_state.messages = [] 
         st.rerun()
 
     st.write("---")
@@ -397,4 +401,5 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
