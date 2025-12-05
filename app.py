@@ -182,6 +182,13 @@ with st.sidebar:
 
 st.title("Tu Espacio")
 
+# --- MOSTRAR HISTORIAL ---
+for message in st.session_state.messages:
+    if message["role"] != "system":
+        av = "👤" if message["role"] == "user" else "🟣"
+        with st.chat_message(message["role"], avatar=av):
+            st.markdown(message["content"])
+
 # --- 8. INPUT UNIFICADO (VOZ Y TEXTO) ---
 audio_wav = st.audio_input("🎙️ Toca para hablar")
 prompt_texto = st.chat_input("Escribe aquí...")
@@ -331,6 +338,7 @@ if input_usuario:
                 hoja_chat.append_row([timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
