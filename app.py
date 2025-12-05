@@ -268,15 +268,19 @@ if input_usuario:
         except Exception as e:
             respuesta_texto = f"Error inesperado: {e}"
 
-# --- LOGICA CALENDARIO ---
+# --- LOGICA CALENDARIO CORREGIDA ---
     if "CALENDAR_CMD:" in respuesta_texto:
         try:
             parts = respuesta_texto.split("CALENDAR_CMD:")
-            respuesta_texto = parts[0].strip() # Muestra solo el texto normal
+            respuesta_texto = parts[0].strip()
             datos = parts[1].strip().split("|")
             if len(datos) >= 3:
-                resumen, ini, fin = datos[0].strip(), datos[1].strip(), datos[2].strip()
+                resumen = datos[0].strip()
+                # Forzar formato ISO (reemplazar espacio por T)
+                ini = datos[1].strip().replace(" ", "T")
+                fin = datos[2].strip().replace(" ", "T")
                 nota = datos[3].strip() if len(datos) > 3 else ""
+                
                 ok, link = crear_evento_calendario(creds, resumen, ini, fin, nota)
                 respuesta_texto += f"\n\n{'✅ Evento creado' if ok else '❌ Error'}: {link}"
         except:
@@ -304,4 +308,5 @@ if input_usuario:
                 hoja_chat.append_row([timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
