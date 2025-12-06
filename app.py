@@ -346,21 +346,19 @@ if input_usuario:
 
             TUS HERRAMIENTAS (TIENES PERMISO TOTAL PARA USARLAS):
 
-            1. PARA AGENDAR EN CALENDARIO (EVENTOS ÚNICOS O REPETITIVOS):
-            Si el usuario pide agendar, DEBES responder usando este formato exacto al final:
+            1. PARA AGENDAR EN CALENDARIO:
             CALENDAR_CMD: Título | YYYY-MM-DD HH:MM | YYYY-MM-DD HH:MM | Nota | RRULE
-
-            * ¿CÓMO LLENAR LA 'RRULE' (REGLA DE REPETICIÓN)?
-              - Si es evento único: No escribas nada en RRULE.
+            * RRULE Ejemplos: 
               - Todos los días: FREQ=DAILY
-              - Cada semana (ej. lunes): FREQ=WEEKLY;BYDAY=MO
-              - Cada mes el día 5: FREQ=MONTHLY;BYMONTHDAY=5
-              - Fin de mes (último día): FREQ=MONTHLY;BYMONTHDAY=-1
-              - Cada mes el primer lunes: FREQ=MONTHLY;BYDAY=1MO
-              - Cada año: FREQ=YEARLY
+              - Cada mes día 5: FREQ=MONTHLY;BYMONTHDAY=5
+              - Fin de mes: FREQ=MONTHLY;BYMONTHDAY=-1
 
-            2. PARA GUARDAR DATOS EN MEMORIA PERMANENTE:
+            2. PARA GUARDAR EN MEMORIA:
             MEMORIA_CMD: Dato a guardar
+
+            3. PARA ENVIAR CORREOS GMAIL:
+            Si te piden enviar un correo, responde con este formato al final:
+            EMAIL_CMD: Destinatario | Asunto | Cuerpo del mensaje
             """
         else:
             sys_context = "Responde como Gemini."
@@ -487,6 +485,7 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
