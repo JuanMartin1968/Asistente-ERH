@@ -460,6 +460,23 @@ if input_usuario:
                 respuesta_texto += "\n(💾 Guardado en perfil)"
         except:
             pass
+
+# --- LOGICA EMAIL ---
+    if "EMAIL_CMD:" in respuesta_texto:
+        try:
+            parts = respuesta_texto.split("EMAIL_CMD:")
+            respuesta_texto = parts[0].strip()
+            datos = parts[1].strip().split("|")
+            
+            if len(datos) >= 3:
+                dest = datos[0].strip()
+                asunto = datos[1].strip()
+                cuerpo = datos[2].strip()
+                
+                ok, msg = enviar_correo_gmail(dest, asunto, cuerpo)
+                respuesta_texto += f"\n\n{'✅ Correo enviado' if ok else '❌ Error correo'}: {msg}"
+        except:
+            pass
   
     # C. RESPUESTA FINAL
     with st.chat_message("assistant", avatar=avatar_bot):
@@ -485,6 +502,7 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
