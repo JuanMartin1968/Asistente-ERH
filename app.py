@@ -301,7 +301,7 @@ if input_usuario:
     with st.chat_message("user", avatar="👤"):
         st.markdown(input_usuario)
 
-    # --- 9. LÓGICA DE PROCESAMIENTO Y RESPUESTA ---
+# --- 9. LÓGICA DE PROCESAMIENTO Y RESPUESTA ---
     es_personal = ("Asistente" in modo)
     tag_modo = "personal" if es_personal else "gemini"
     avatar_bot = "🟣" if es_personal else "✨"
@@ -333,6 +333,7 @@ if input_usuario:
               - Todos los días: FREQ=DAILY
               - Cada semana (ej. lunes): FREQ=WEEKLY;BYDAY=MO
               - Cada mes el día 5: FREQ=MONTHLY;BYMONTHDAY=5
+              - Fin de mes (último día): FREQ=MONTHLY;BYMONTHDAY=-1
               - Cada mes el primer lunes: FREQ=MONTHLY;BYDAY=1MO
               - Cada año: FREQ=YEARLY
 
@@ -341,7 +342,7 @@ if input_usuario:
             """
         else:
             sys_context = "Responde como Gemini."
-      
+    
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_activo}:generateContent?key={api_key}"
             headers = {'Content-Type': 'application/json'}
@@ -464,6 +465,7 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
