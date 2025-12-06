@@ -136,6 +136,46 @@ def enviar_correo_gmail(destinatario, asunto, cuerpo):
     except Exception as e:
         return False, str(e)
 
+# --- FUNCIONES DE GESTIÓN DE TAREAS ---
+def gestionar_tareas(modo, datos=None):
+    try:
+        # Conexión a la Hoja
+        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
+        client = gspread.authorize(creds)
+        sheet = client.open_by_key(st.secrets["SPREADSHEET_ID"]).worksheet("Tareas")
+
+        if modo == "LISTAR":
+            # Obtiene todas las tareas
+            registros = sheet.get_all_records()
+            if not registros: return "No hay tareas registradas."
+            texto = "LISTA DE TAREAS:\n"
+            for i, r in enumerate(registros, start=2): # start=2 para saber la fila real en Excel
+                # Calcula porcentaje visual si la fórmula no cargó
+                check1 = "✅" if r.get('Subtarea 1') == "TRUE" or r.get('Subtarea 1') is True else "⬜"
+                check2 = "✅" if r.get('Subtarea 2') == "TRUE" or r.get('Subtarea 2') is True else "⬜"
+                check3 = "✅" if r.get('Subtarea 3') == "TRUE" or r.get('Subtarea 3') is True else "⬜"
+                # Formato: Fila | Tarea | Avance
+                texto += f"[Fila {i}] {r.get('Tarea')} | Avance: {r.get('Avance')}\n   Subs: 1.{check1}  2.{check2}  3.{check3}\n"
+            return texto
+
+        elif modo == "AGREGAR":
+            # datos = [Tarea, Sub1, Sub2, Sub3, Fecha]
+            # Agregamos FALSE (falso) para que las casillas nazcan vacías
+            fila = [datos[0], False, False, False, "", "Pendiente", datos[4]]
+            sheet.append_row(fila)
+            return "Tarea agregada correctamente."
+
+        elif modo == "CHECK":
+            # datos = [Numero_Fila, Numero_Subtarea (1,2,3)]
+            fila_idx = int(datos[0])
+            col_idx = int(datos[1]) + 1 # Columna B=2, C=3, D=4
+            sheet.update_cell(fila_idx, col_idx, True)
+            return "Subtarea marcada y porcentaje actualizado."
+
+    except Exception as e:
+        return f"Error en tareas: {str(e)}"
+
 
 # --- 5. CEREBRO Y AUTODETECCIÓN ---
 try:
@@ -346,19 +386,28 @@ if input_usuario:
 
             TUS HERRAMIENTAS (TIENES PERMISO TOTAL PARA USARLAS):
 
-            1. PARA AGENDAR EN CALENDARIO:
+            1. TAREAS Y PROYECTOS (PRIORIDAD):
+            - Para ver tareas: "TAREA_CMD: LISTAR"
+            - Para crear tarea: "TAREA_CMD: AGREGAR | Tarea | Sub1 | Sub2 | Sub3 | FechaFin"
+              (Si no hay subtareas, pon un guion "-")
+            - Para marcar avance: "TAREA_CMD: CHECK | NumeroFila | NumeroSubtarea(1,2,3)"
+              (Primero LISTA las tareas para saber el Número de Fila, luego marca).
+
+            2. PARA AGENDAR EN CALENDARIO:
             CALENDAR_CMD: Título | YYYY-MM-DD HH:MM | YYYY-MM-DD HH:MM | Nota | RRULE
             * RRULE Ejemplos: 
               - Todos los días: FREQ=DAILY
               - Cada mes día 5: FREQ=MONTHLY;BYMONTHDAY=5
               - Fin de mes: FREQ=MONTHLY;BYMONTHDAY=-1
 
-            2. PARA GUARDAR EN MEMORIA:
+            3. PARA GUARDAR EN MEMORIA:
             MEMORIA_CMD: Dato a guardar
 
-            3. PARA ENVIAR CORREOS GMAIL:
+            4. PARA ENVIAR CORREOS GMAIL:
             Si te piden enviar un correo, responde con este formato al final:
             EMAIL_CMD: Destinatario | Asunto | Cuerpo del mensaje
+
+            NOTA: Si te preguntan "¿Qué tengo pendiente?", SIEMPRE ejecuta primero TAREA_CMD: LISTAR.
             """
         else:
             sys_context = "Responde como Gemini."
@@ -477,6 +526,32 @@ if input_usuario:
                 respuesta_texto += f"\n\n{'✅ Correo enviado' if ok else '❌ Error correo'}: {msg}"
         except:
             pass
+
+  # --- LOGICA TAREAS ---
+    if "TAREA_CMD:" in respuesta_texto:
+        try:
+            parts = respuesta_texto.split("TAREA_CMD:")
+            respuesta_texto = parts[0].strip() # Limpia la respuesta visual
+            cmd_full = parts[1].strip().split("|")
+            accion = cmd_full[0].strip()
+
+            if accion == "LISTAR":
+                res = gestionar_tareas("LISTAR")
+                respuesta_texto += f"\n\n📋 {res}"
+            
+            elif accion == "AGREGAR" and len(cmd_full) >= 6:
+                # AGREGAR | Tarea | Sub1 | Sub2 | Sub3 | Fecha
+                res = gestionar_tareas("AGREGAR", [cmd_full[1], cmd_full[2], cmd_full[3], cmd_full[4], cmd_full[5]])
+                respuesta_texto += f"\n\n✅ {res}"
+
+            elif accion == "CHECK" and len(cmd_full) >= 3:
+                # CHECK | Fila | Subtarea
+                res = gestionar_tareas("CHECK", [cmd_full[1], cmd_full[2]])
+                respuesta_texto += f"\n\n📈 {res}"
+                
+        except Exception as e:
+            respuesta_texto += f"\n\n❌ Error procesando tarea: {str(e)}"
+
   
     # C. RESPUESTA FINAL
     with st.chat_message("assistant", avatar=avatar_bot):
@@ -502,6 +577,7 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
