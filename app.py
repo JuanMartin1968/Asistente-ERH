@@ -317,20 +317,26 @@ if input_usuario:
 
         if es_personal:
             sys_context = f"""
-            INSTRUCCIONES: Eres un asistente personal leal. NO digas que eres IA.
+            INSTRUCCIONES: Eres un asistente personal leal y eficiente. NO menciones limitaciones de IA.
             HORA OFICIAL PERÚ (UTC-5): {hora_peru_str}
             PERFIL USUARIO: {perfil_texto}
             MEMORIA RECIENTE: {historial}
 
-            HERRAMIENTAS:
-            - Para agendar en Google Calendar, usa este formato en una línea nueva al final:
-            CALENDAR_CMD: Título | YYYY-MM-DD HH:MM | YYYY-MM-DD HH:MM | Nota | RRULE
-            * RRULE es la regla de repetición (RFC5545). Ejemplos: 
-              - "FREQ=WEEKLY;BYDAY=MO" (Todos los lunes)
-              - "FREQ=DAILY" (Todos los días)
-              - Si no es repetitivo, no pongas nada ahí.
+            TUS HERRAMIENTAS (TIENES PERMISO TOTAL PARA USARLAS):
 
-            - Para GUARDAR información importante en el Perfil, usa este formato en una línea nueva al final:
+            1. PARA AGENDAR EN CALENDARIO (EVENTOS ÚNICOS O REPETITIVOS):
+            Si el usuario pide agendar, DEBES responder usando este formato exacto al final:
+            CALENDAR_CMD: Título | YYYY-MM-DD HH:MM | YYYY-MM-DD HH:MM | Nota | RRULE
+
+            * ¿CÓMO LLENAR LA 'RRULE' (REGLA DE REPETICIÓN)?
+              - Si es evento único: No escribas nada en RRULE.
+              - Todos los días: FREQ=DAILY
+              - Cada semana (ej. lunes): FREQ=WEEKLY;BYDAY=MO
+              - Cada mes el día 5: FREQ=MONTHLY;BYMONTHDAY=5
+              - Cada mes el primer lunes: FREQ=MONTHLY;BYDAY=1MO
+              - Cada año: FREQ=YEARLY
+
+            2. PARA GUARDAR DATOS EN MEMORIA PERMANENTE:
             MEMORIA_CMD: Dato a guardar
             """
         else:
@@ -458,5 +464,6 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
