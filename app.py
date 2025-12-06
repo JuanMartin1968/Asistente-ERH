@@ -385,29 +385,41 @@ if input_usuario:
         except Exception as e:
             respuesta_texto = f"Error inesperado: {e}"
 
-# --- LOGICA CALENDARIO (CORREGIDA SEGUNDOS) ---
+# --- LOGICA CALENDARIO (CON REPETICIÓN) ---
     if "CALENDAR_CMD:" in respuesta_texto:
         try:
             parts = respuesta_texto.split("CALENDAR_CMD:")
             respuesta_texto = parts[0].strip()
+            
+            # Ahora esperamos hasta 5 partes: Título | Inicio | Fin | Nota | RRULE
             datos = parts[1].strip().split("|")
+            
             if len(datos) >= 3:
                 resumen = datos[0].strip()
-                # 1. Reemplazar espacio por T
+                
+                # 1. Formato ISO
                 ini_raw = datos[1].strip().replace(" ", "T")
                 fin_raw = datos[2].strip().replace(" ", "T")
-                
-                # 2. Agregar :00 si faltan los segundos (longitud 16 es YYYY-MM-DDTHH:MM)
                 if len(ini_raw) == 16: ini_raw += ":00"
                 if len(fin_raw) == 16: fin_raw += ":00"
 
+                # 2. Nota (Opcional)
                 nota = datos[3].strip() if len(datos) > 3 else ""
                 
-                ok, link = crear_evento_calendario(creds, resumen, ini_raw, fin_raw, nota)
-                respuesta_texto += f"\n\n{'✅ Evento creado' if ok else '❌ Error'}: {link}"
+                # 3. Regla de Repetición (RRULE) - Opcional
+                rule = None
+                if len(datos) > 4:
+                    rule_raw = datos[4].strip()
+                    if "FREQ=" in rule_raw: # Solo si parece una regla válida
+                        rule = "RRULE:" + rule_raw if not rule_raw.startswith("RRULE:") else rule_raw
+
+                ok, link = crear_evento_calendario(creds, resumen, ini_raw, fin_raw, nota, rule)
+                
+                tipo = "repetitivo" if rule else "único"
+                respuesta_texto += f"\n\n{'✅ Evento ' + tipo + ' creado' if ok else '❌ Error'}: {link}"
         except:
             pass
-
+  
 # --- LOGICA MEMORIA (PERFIL) CON FECHA ---
     if "MEMORIA_CMD:" in respuesta_texto:
         try:
@@ -446,4 +458,5 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
