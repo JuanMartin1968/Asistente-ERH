@@ -324,14 +324,18 @@ if input_usuario:
 
             HERRAMIENTAS:
             - Para agendar en Google Calendar, usa este formato en una línea nueva al final:
-            CALENDAR_CMD: Título | YYYY-MM-DD HH:MM | YYYY-MM-DD HH:MM | Nota
+            CALENDAR_CMD: Título | YYYY-MM-DD HH:MM | YYYY-MM-DD HH:MM | Nota | RRULE
+            * RRULE es la regla de repetición (RFC5545). Ejemplos: 
+              - "FREQ=WEEKLY;BYDAY=MO" (Todos los lunes)
+              - "FREQ=DAILY" (Todos los días)
+              - Si no es repetitivo, no pongas nada ahí.
 
             - Para GUARDAR información importante en el Perfil, usa este formato en una línea nueva al final:
             MEMORIA_CMD: Dato a guardar
             """
         else:
             sys_context = "Responde como Gemini."
-
+      
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_activo}:generateContent?key={api_key}"
             headers = {'Content-Type': 'application/json'}
@@ -442,3 +446,4 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
