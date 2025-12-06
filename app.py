@@ -136,51 +136,48 @@ def enviar_correo_gmail(destinatario, asunto, cuerpo):
     except Exception as e:
         return False, str(e)
 
-# --- FUNCIONES DE GESTIÓN DE TAREAS (CORREGIDA) ---
+# --- FUNCIONES DE GESTIÓN DE TAREAS (CORREGIDA FINAL) ---
 def gestionar_tareas(modo, datos=None):
     try:
         import json
-        # Conexión a la Hoja usando GOOGLE_CREDENTIALS correcto
+        # Conexión a la Hoja con strict=False para tolerar errores de formato en la llave
         scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(st.secrets["GOOGLE_CREDENTIALS"]), scope)
+        
+        # EL CAMBIO ESTÁ AQUÍ: strict=False
+        creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS"], strict=False)
+        
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
         sheet = client.open_by_key(st.secrets["SPREADSHEET_ID"]).worksheet("Tareas")
 
         if modo == "LISTAR":
-            # Obtiene todas las tareas
             registros = sheet.get_all_records()
             if not registros: return "No hay tareas registradas."
             texto = "LISTA DE TAREAS:\n"
-            for i, r in enumerate(registros, start=2): # start=2 para saber la fila real en Excel
-                # Verificamos si es TRUE (texto o booleano)
+            for i, r in enumerate(registros, start=2):
                 s1 = str(r.get('Subtarea 1')).upper() == "TRUE"
                 s2 = str(r.get('Subtarea 2')).upper() == "TRUE"
                 s3 = str(r.get('Subtarea 3')).upper() == "TRUE"
-                
                 check1 = "✅" if s1 else "⬜"
                 check2 = "✅" if s2 else "⬜"
                 check3 = "✅" if s3 else "⬜"
-                
-                # Formato: Fila | Tarea | Avance
                 texto += f"[Fila {i}] {r.get('Tarea')} | Avance: {r.get('Avance')}\n   Subs: 1.{check1}  2.{check2}  3.{check3}\n"
             return texto
 
         elif modo == "AGREGAR":
-            # datos = [Tarea, Sub1, Sub2, Sub3, Fecha]
-            # Agregamos FALSE para que las casillas nazcan vacías
             fila = [datos[0], False, False, False, "", "Pendiente", datos[4]]
             sheet.append_row(fila)
             return "Tarea agregada correctamente."
 
         elif modo == "CHECK":
-            # datos = [Numero_Fila, Numero_Subtarea (1,2,3)]
             fila_idx = int(datos[0])
-            col_idx = int(datos[1]) + 1 # Columna B=2, C=3, D=4
+            col_idx = int(datos[1]) + 1
             sheet.update_cell(fila_idx, col_idx, True)
             return "Subtarea marcada y porcentaje actualizado."
 
     except Exception as e:
         return f"Error en tareas: {str(e)}"
+
 # --- 5. CEREBRO Y AUTODETECCIÓN ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"].strip()
@@ -581,6 +578,7 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
