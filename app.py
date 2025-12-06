@@ -90,8 +90,7 @@ def conectar_memoria(creds):
     except:
         return None, None
 
-
-def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso, nota_alerta=""):
+def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso, nota_alerta="", recurrence=None):
     try:
         service = build('calendar', 'v3', credentials=creds)
         reminders = {'useDefault': False, 'overrides': [
@@ -105,6 +104,11 @@ def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso, nota_alerta="")
             'end': {'dateTime': fin_iso, 'timeZone': 'America/Lima'},
             'reminders': reminders
         }
+        
+        # Si hay regla de repetición, la agregamos
+        if recurrence:
+            evento['recurrence'] = [recurrence]
+
         creado = service.events().insert(calendarId=TU_EMAIL_GMAIL, body=evento).execute()
         return True, creado.get('htmlLink')
     except Exception as e:
@@ -438,12 +442,3 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
-
-
-
-
-
-
-
-
-
