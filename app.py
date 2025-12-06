@@ -67,7 +67,6 @@ def texto_a_audio(texto):
 
 # --- 4. FUNCIONES DE CONEXIÓN Y ALERTA ---
 
-
 def obtener_credenciales():
     try:
         json_text = st.secrets["GOOGLE_CREDENTIALS"]
@@ -111,6 +110,29 @@ def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso, nota_alerta="",
 
         creado = service.events().insert(calendarId=TU_EMAIL_GMAIL, body=evento).execute()
         return True, creado.get('htmlLink')
+    except Exception as e:
+        return False, str(e)
+
+import smtplib
+from email.mime.text import MIMEText
+
+def enviar_correo_gmail(destinatario, asunto, cuerpo):
+    try:
+        remitente = st.secrets["GMAIL_USER"]
+        password = st.secrets["GMAIL_PASSWORD"]
+        
+        msg = MIMEText(cuerpo)
+        msg['Subject'] = asunto
+        msg['From'] = remitente
+        msg['To'] = destinatario
+
+        # Conexión con Gmail
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(remitente, password)
+        server.sendmail(remitente, destinatario, msg.as_string())
+        server.quit()
+        return True, "Correo enviado"
     except Exception as e:
         return False, str(e)
 
@@ -465,6 +487,7 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
