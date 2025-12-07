@@ -135,11 +135,12 @@ def enviar_correo_gmail(destinatario, asunto, cuerpo):
     except Exception as e:
         return False, str(e)
 
-# --- FUNCIONES DE GESTIÓN DE TAREAS (TABLA CORREGIDA + CÁLCULO) ---
+# --- FUNCIONES DE GESTIÓN DE TAREAS (ESTRUCTURA FIJA 15 COLUMNAS) ---
 def gestionar_tareas(modo, datos=None):
     try:
         import json
         scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        # Conexión flexible para tolerar errores de formato en secrets
         creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS"], strict=False)
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
@@ -149,43 +150,91 @@ def gestionar_tareas(modo, datos=None):
             registros = sheet.get_all_records()
             if not registros: return "No hay tareas registradas."
             
-            # INICIO DE LA TABLA (Con salto de línea inicial clave)
-            texto = "\n| ID | Tarea | Subtareas | Avance |\n| :---: | :--- | :--- | :---: |\n"
+            texto = "\n| ID | Tarea | Subtareas | Avance | Fecha |\n| :---: | :--- | :--- | :---: | :--- |\n"
             
-            for i, r in enumerate(registros, start=2):
-                # Leemos el estado real de las casillas
-                s1 = str(r.get('Subtarea 1')).upper() == "TRUE"
-                s2 = str(r.get('Subtarea 2')).upper() == "TRUE"
-                s3 = str(r.get('Subtarea 3')).upper() == "TRUE"
+            for i, r in enumerate(registros, start=2): # start=2 es la fila Excel
+                id_visual = i - 1
                 
-                # Iconos
-                c1 = "✅" if s1 else "⬜"
-                c2 = "✅" if s2 else "⬜"
-                c3 = "✅" if s3 else "⬜"
+                # Leemos las columnas de Subtareas (B hasta P son 15 columnas)
+                # En gspread, los headers del diccionario dependen de lo que tengas en la fila 1.
+                # Asumimos que el código busca por keys tipo "Subtarea 1", "Subtarea 2"...
                 
-                # Cálculo matemático en Python (más seguro que Excel)
-                hechas = sum([s1, s2, s3])
-                porcentaje = f"{int((hechas/3)*100)}%"
+                subtasks_status = []
+                # Buscamos hasta 15 subtareas
+                for x in range(1, 16):
+                    key = f"Subtarea {x}"
+                    val = str(r.get(key, "")).strip().upper()
+                    if val == "TRUE":
+                        subtasks_status.append(True)
+                    elif val == "FALSE":
+                        subtasks_status.append(False)
+                    # Si está vacío "", no cuenta como tarea activa
                 
-                # Fila de la tabla
-                texto += f"| **{i}** | {r.get('Tarea')} | {c1} {c2} {c3} | **{porcentaje}** |\n"
+                total = len(subtasks_status)
+                hechas = sum(subtasks_status)
+                
+                # Visualización (Solo mostramos iconos de las activas)
+                iconos = ""
+                for s in subtasks_status:
+                    iconos += "✅ " if s else "⬜ "
+                
+                # Cálculo % en Python
+                porc = f"{int((hechas/total)*100)}%" if total > 0 else "0%"
+                
+                # Columna S es 'Fecha Limite'
+                fecha = r.get("Fecha Limite", "")
+                
+                texto += f"| **{id_visual}** | {r.get('Tarea')} | {iconos} | **{porc}** | {fecha} |\n"
             return texto
 
         elif modo == "AGREGAR":
-            # Agregamos la tarea
-            fila = [datos[0], False, False, False, "", "Pendiente", datos[4]]
+            # datos = [Tarea, Fecha, Sub1, Sub2, Sub3...]
+            tarea = datos[0]
+            fecha = datos[1]
+            subs_list = datos[2:]
+            
+            # Construimos la fila exacta para Columnas A hasta S
+            fila = []
+            fila.append(tarea) # Col A
+            
+            # Cols B a P (15 espacios)
+            # Llenamos con FALSE las que existen, y "" las que sobran
+            for x in range(15):
+                if x < len(subs_list):
+                    fila.append(False) # Subtarea activa pendiente
+                else:
+                    fila.append("")    # Espacio vacío
+            
+            # Col Q (Avance) - Ponemos una fórmula o 0
+            # Para evitar líos de fórmulas rotas, ponemos el valor inicial
+            fila.append("0%") 
+            
+            # Col R (Estado)
+            fila.append("Pendiente")
+            
+            # Col S (Fecha Limite)
+            fila.append(fecha)
+            
             sheet.append_row(fila)
-            return "Tarea agregada."
+            return f"Tarea '{tarea}' guardada correctamente en la fila."
 
         elif modo == "CHECK":
-            fila_idx = int(datos[0])
-            col_idx = int(datos[1]) + 1
+            # datos = [ID_Visual, Num_Subtarea]
+            fila_idx = int(datos[0]) + 1
+            sub_num = int(datos[1])
+            
+            # Calculamos la columna exacta. 
+            # Col A=1. Col B (Sub1)=2. Col C (Sub2)=3...
+            col_idx = 1 + sub_num 
+            
+            # Verificación de seguridad (No salirnos del rango 15)
+            if sub_num > 15: return "Error: Solo hay 15 espacios para subtareas."
+            
             sheet.update_cell(fila_idx, col_idx, True)
-            return "Listo. Avance actualizado."
+            return "Avance registrado."
 
     except Exception as e:
-        return f"Error: {str(e)}"
-      
+        return f"Error: {str(e)}"      
 
 # --- 5. CEREBRO Y AUTODETECCIÓN ---
 try:
@@ -417,6 +466,14 @@ if input_usuario:
             Si te piden enviar un correo, responde con este formato al final:
             EMAIL_CMD: Destinatario | Asunto | Cuerpo del mensaje
 
+            GESTIÓN DE TAREAS (Checklist y Proyectos):
+            - REGLA DE ORO: JAMÁS ejecutes el comando AGREGAR sin antes presentar un BORRADOR y pedir confirmación ("¿Es correcto?").
+            - Capacidad: Tarea + hasta 15 Subtareas (Columnas B a P).
+            - COMANDO GUARDAR: "TAREA_CMD: AGREGAR | Tarea | Fecha | Sub1 | Sub2 | ... | SubN"
+            - COMANDO LISTAR: "TAREA_CMD: LISTAR"
+            - COMANDO CHECK: "TAREA_CMD: CHECK | ID_Visual | Numero_Subtarea"
+            - IMPORTANTE: Si el usuario dicta desordenado, tú ordena la información antes de mostrar el borrador.
+
             NOTA: Si te preguntan "¿Qué tengo pendiente?", SIEMPRE ejecuta primero TAREA_CMD: LISTAR.
             """
         else:
@@ -587,4 +644,5 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
