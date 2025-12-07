@@ -6,6 +6,7 @@ import datetime
 import base64
 import io
 import re
+import time  # Agregado para el backoff
 from gtts import gTTS
 from oauth2client.service_account import ServiceAccountCredentials
 from googleapiclient.discovery import build
@@ -234,7 +235,7 @@ def gestionar_tareas(modo, datos=None):
             return "Avance registrado."
 
     except Exception as e:
-        return f"Error: {str(e)}"      
+        return f"Error: {str(e)}"       
 
 # --- 5. CEREBRO Y AUTODETECCIÓN ---
 try:
@@ -243,24 +244,8 @@ except:
     st.error("Falta API Key")
     st.stop()
 
-
-@st.cache_data
-def detectar_modelo_real(key):
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
-        response = requests.get(url)
-        if response.status_code == 200:
-            data = response.json()
-            for m in data.get('models', []):
-                if 'generateContent' in m.get('supportedGenerationMethods', []):
-                    return m['name']
-    except:
-        pass
-    return "models/gemini-1.5-flash"
-
-
-modelo_activo = detectar_modelo_real(api_key)
-
+# --- CAMBIO: Modelo HARDCODED para evitar uso de versión 2.5 (limitada a 20/día) ---
+modelo_activo = "gemini-1.5-flash"
 
 def get_hora_peru():
     # Hora de Lima (UTC-5)
@@ -513,18 +498,30 @@ if input_usuario:
                 payload_parts.append({"text": "USUARIO: " + prompt_texto})
 
             payload = {"contents": [{"parts": payload_parts}]}
-          
-            # Llamada a la API
-            resp = requests.post(url, headers=headers,
-                                 data=json.dumps(payload))
+            
+            # --- LLAMADA A LA API CON EXPONENTIAL BACKOFF ---
+            # Reintenta si recibe error 429 (Resource Exhausted)
+            max_retries = 3
+            resp = None
+            
+            for attempt in range(max_retries):
+                resp = requests.post(url, headers=headers, data=json.dumps(payload))
+                
+                if resp.status_code == 429:
+                    # Si es error de cuota, esperar incrementalmente (2s, 4s, 8s...)
+                    wait_time = 2 ** (attempt + 1)
+                    time.sleep(wait_time)
+                    continue # Reintentar
+                
+                # Si no es 429, salimos del bucle (sea éxito u otro error)
+                break
 
-            if resp.status_code == 200:
-                respuesta_texto = resp.json(
-                )['candidates'][0]['content']['parts'][0]['text']
+            if resp and resp.status_code == 200:
+                respuesta_texto = resp.json()['candidates'][0]['content']['parts'][0]['text']
             else:
                 respuesta_texto = f"Error {resp.status_code}: {resp.text}"
                 if "quota" in resp.text:
-                    respuesta_texto += "\n(Puede ser un problema temporal de cuota de API.)"
+                    respuesta_texto += "\n(La cuota de API sigue saturada tras varios intentos. Espera unos minutos.)"
         except Exception as e:
             respuesta_texto = f"Error inesperado: {e}"
 
@@ -648,6 +645,3 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
-
-
-
