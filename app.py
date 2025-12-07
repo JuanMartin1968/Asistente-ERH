@@ -245,7 +245,7 @@ except:
     st.stop()
 
 # --- CAMBIO: Modelo HARDCODED para evitar uso de versión 2.5 (limitada a 20/día) ---
-modelo_activo = "models/learnlm-2.0-flash-experimental"
+modelo_activo = "models/gemini-2.5-flash-live"
 
 def get_hora_peru():
     # Hora de Lima (UTC-5)
@@ -645,5 +645,6 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
