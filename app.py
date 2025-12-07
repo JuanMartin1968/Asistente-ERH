@@ -45,7 +45,6 @@ st.markdown("""
 
 # --- 3. FUNCIONES DE AUDIO Y LIMPIEZA ---
 
-
 def limpiar_texto_para_audio(texto):
     # Quita asteriscos, guiones bajos, hashtags y links
     t = re.sub(r'[*_#]', '', texto)
@@ -136,16 +135,13 @@ def enviar_correo_gmail(destinatario, asunto, cuerpo):
     except Exception as e:
         return False, str(e)
 
-# --- FUNCIONES DE GESTIÓN DE TAREAS (CORREGIDA FINAL) ---
+# --- FUNCIONES DE GESTIÓN DE TAREAS (VISUAL MEJORADA) ---
 def gestionar_tareas(modo, datos=None):
     try:
         import json
-        # Conexión a la Hoja con strict=False para tolerar errores de formato en la llave
+        # Conexión Segura (HTTPS por defecto en API de Google)
         scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-        
-        # EL CAMBIO ESTÁ AQUÍ: strict=False
         creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS"], strict=False)
-        
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
         sheet = client.open_by_key(st.secrets["SPREADSHEET_ID"]).worksheet("Tareas")
@@ -153,15 +149,23 @@ def gestionar_tareas(modo, datos=None):
         if modo == "LISTAR":
             registros = sheet.get_all_records()
             if not registros: return "No hay tareas registradas."
-            texto = "LISTA DE TAREAS:\n"
+            
+            # Cabecera de la Tabla Markdown
+            texto = "| ID | Tarea | Subtareas (1-2-3) | Avance |\n| :---: | :--- | :--- | :---: |\n"
+            
             for i, r in enumerate(registros, start=2):
+                # Verificación de casillas
                 s1 = str(r.get('Subtarea 1')).upper() == "TRUE"
                 s2 = str(r.get('Subtarea 2')).upper() == "TRUE"
                 s3 = str(r.get('Subtarea 3')).upper() == "TRUE"
-                check1 = "✅" if s1 else "⬜"
-                check2 = "✅" if s2 else "⬜"
-                check3 = "✅" if s3 else "⬜"
-                texto += f"[Fila {i}] {r.get('Tarea')} | Avance: {r.get('Avance')}\n   Subs: 1.{check1}  2.{check2}  3.{check3}\n"
+                
+                # Iconos visuales
+                c1 = "✅" if s1 else "⬜"
+                c2 = "✅" if s2 else "⬜"
+                c3 = "✅" if s3 else "⬜"
+                
+                # Fila de la tabla
+                texto += f"| **{i}** | {r.get('Tarea')} | {c1} {c2} {c3} | **{r.get('Avance')}** |\n"
             return texto
 
         elif modo == "AGREGAR":
@@ -578,13 +582,3 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
-
-
-
-
-
-
-
-
-
-
