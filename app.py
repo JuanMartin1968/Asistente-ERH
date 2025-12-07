@@ -135,11 +135,10 @@ def enviar_correo_gmail(destinatario, asunto, cuerpo):
     except Exception as e:
         return False, str(e)
 
-# --- FUNCIONES DE GESTIÓN DE TAREAS (VISUAL MEJORADA) ---
+# --- FUNCIONES DE GESTIÓN DE TAREAS (TABLA CORREGIDA + CÁLCULO) ---
 def gestionar_tareas(modo, datos=None):
     try:
         import json
-        # Conexión Segura (HTTPS por defecto en API de Google)
         scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
         creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS"], strict=False)
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
@@ -150,37 +149,43 @@ def gestionar_tareas(modo, datos=None):
             registros = sheet.get_all_records()
             if not registros: return "No hay tareas registradas."
             
-            # Cabecera de la Tabla Markdown
-            texto = "| ID | Tarea | Subtareas (1-2-3) | Avance |\n| :---: | :--- | :--- | :---: |\n"
+            # INICIO DE LA TABLA (Con salto de línea inicial clave)
+            texto = "\n| ID | Tarea | Subtareas | Avance |\n| :---: | :--- | :--- | :---: |\n"
             
             for i, r in enumerate(registros, start=2):
-                # Verificación de casillas
+                # Leemos el estado real de las casillas
                 s1 = str(r.get('Subtarea 1')).upper() == "TRUE"
                 s2 = str(r.get('Subtarea 2')).upper() == "TRUE"
                 s3 = str(r.get('Subtarea 3')).upper() == "TRUE"
                 
-                # Iconos visuales
+                # Iconos
                 c1 = "✅" if s1 else "⬜"
                 c2 = "✅" if s2 else "⬜"
                 c3 = "✅" if s3 else "⬜"
                 
+                # Cálculo matemático en Python (más seguro que Excel)
+                hechas = sum([s1, s2, s3])
+                porcentaje = f"{int((hechas/3)*100)}%"
+                
                 # Fila de la tabla
-                texto += f"| **{i}** | {r.get('Tarea')} | {c1} {c2} {c3} | **{r.get('Avance')}** |\n"
+                texto += f"| **{i}** | {r.get('Tarea')} | {c1} {c2} {c3} | **{porcentaje}** |\n"
             return texto
 
         elif modo == "AGREGAR":
+            # Agregamos la tarea
             fila = [datos[0], False, False, False, "", "Pendiente", datos[4]]
             sheet.append_row(fila)
-            return "Tarea agregada correctamente."
+            return "Tarea agregada."
 
         elif modo == "CHECK":
             fila_idx = int(datos[0])
             col_idx = int(datos[1]) + 1
             sheet.update_cell(fila_idx, col_idx, True)
-            return "Subtarea marcada y porcentaje actualizado."
+            return "Listo. Avance actualizado."
 
     except Exception as e:
-        return f"Error en tareas: {str(e)}"
+        return f"Error: {str(e)}"
+      
 
 # --- 5. CEREBRO Y AUTODETECCIÓN ---
 try:
@@ -582,3 +587,4 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
