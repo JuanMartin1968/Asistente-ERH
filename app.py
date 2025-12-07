@@ -594,31 +594,35 @@ if input_usuario:
         except:
             pass
 
-  # --- LOGICA TAREAS ---
+# --- LOGICA TAREAS (ACTUALIZADA 15 SUBS) ---
     if "TAREA_CMD:" in respuesta_texto:
         try:
             parts = respuesta_texto.split("TAREA_CMD:")
-            respuesta_texto = parts[0].strip() # Limpia la respuesta visual
-            cmd_full = parts[1].strip().split("|")
-            accion = cmd_full[0].strip()
+            respuesta_texto = parts[0].strip() # Limpia lo visual
+            
+            # Separamos por barra vertical "|"
+            cmd_full = [x.strip() for x in parts[1].split("|")]
+            accion = cmd_full[0].upper()
 
             if accion == "LISTAR":
                 res = gestionar_tareas("LISTAR")
-                respuesta_texto += f"\n\n📋 {res}"
+                respuesta_texto += f"\n\n{res}"
             
-            elif accion == "AGREGAR" and len(cmd_full) >= 6:
-                # AGREGAR | Tarea | Sub1 | Sub2 | Sub3 | Fecha
-                res = gestionar_tareas("AGREGAR", [cmd_full[1], cmd_full[2], cmd_full[3], cmd_full[4], cmd_full[5]])
+            elif accion == "AGREGAR" and len(cmd_full) >= 3:
+                # Formato esperado: AGREGAR | Tarea | Fecha | Sub1 | Sub2...
+                # Pasamos todo lo que haya después de AGREGAR como datos
+                # datos = [Tarea, Fecha, Sub1, Sub2, ...]
+                datos_tarea = cmd_full[1:] 
+                res = gestionar_tareas("AGREGAR", datos_tarea)
                 respuesta_texto += f"\n\n✅ {res}"
 
             elif accion == "CHECK" and len(cmd_full) >= 3:
-                # CHECK | Fila | Subtarea
+                # CHECK | ID_Visual | Num_Subtarea
                 res = gestionar_tareas("CHECK", [cmd_full[1], cmd_full[2]])
                 respuesta_texto += f"\n\n📈 {res}"
                 
         except Exception as e:
             respuesta_texto += f"\n\n❌ Error procesando tarea: {str(e)}"
-
   
     # C. RESPUESTA FINAL
     with st.chat_message("assistant", avatar=avatar_bot):
@@ -644,5 +648,6 @@ if input_usuario:
                 hoja_chat.append_row([id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
