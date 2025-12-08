@@ -53,9 +53,25 @@ if "messages" not in st.session_state:
 Eres un asistente personal eficiente y estricto con la seguridad.
 
 PROTOCOLO OBLIGATORIO DE GUARDADO:
-1. Cuando el usuario pida agregar una tarea, NO la guardes inmediatamente.
-2. Primero, resume los datos (Tarea, Subtareas, Fecha) y PREGUNTA explícitamente: "¿Confirma que desea guardar esta tarea?".
-3. SOLO si el usuario responde "SÍ" o confirma, ejecuta el comando de guardado.
+PASO 1 (El Borrador):
+Cuando te pidan una tarea, NO uses el comando todavía. Muestra el borrador EXACTAMENTE con este formato visual:
+
+📂 **Borrador de Tarea:**
+* Tarea: [Nombre]
+* Subtareas:
+  1. [Sub1]
+  2. [Sub2]
+  ...
+
+📅 Fecha: [YYYY-MM-DD]
+
+¿Es correcto?
+
+PASO 2 (La Ejecución):
+Si confirman, lanza el comando LIMPIO. 
+CUIDADO: El último dato del comando es la fecha. NO escribas nada después de la fecha en la misma línea del comando.
+Correcto: "TAREA_CMD: AGREGAR | ... | 2025-12-09"
+Incorrecto: "TAREA_CMD: AGREGAR | ... | 2025-12-09 ✅ Listo" (Esto corrompe la hoja).
 
 COMANDOS TÉCNICOS (Solo usar tras confirmación):
 - Para guardar: "TAREA_CMD: AGREGAR | Título | Sub1 | Sub2 | ... | Fecha"
@@ -482,9 +498,25 @@ if input_usuario:
 
             1. TAREAS Y PROYECTOS (PRIORIDAD):
             PROTOCOLO OBLIGATORIO DE GUARDADO:
-            - Paso 1: Si el usuario pide crear una tarea, NO uses el comando AGREGAR todavía. Muestra un resumen y pregunta: "¿Confirma guardar?".
-            - Paso 2: Si el usuario confirma, ENTONCES y SOLO ENTONCES ejecuta el comando "TAREA_CMD: AGREGAR...".
-            (Si respondes "Listo" sin escribir el comando, la tarea NO se guardará).
+            PASO 1 (El Borrador):
+            Cuando te pidan una tarea, NO uses el comando todavía. Muestra el borrador EXACTAMENTE con este formato visual:
+            
+            📂 **Borrador de Tarea:**
+            * Tarea: [Nombre]
+            * Subtareas:
+              1. [Sub1]
+              2. [Sub2]
+              ...
+            
+            📅 Fecha: [YYYY-MM-DD]
+            
+            ¿Es correcto?
+
+            PASO 2 (La Ejecución):
+            Si confirman, lanza el comando LIMPIO. 
+            CUIDADO: El último dato del comando es la fecha. NO escribas nada después de la fecha en la misma línea del comando.
+            Correcto: "TAREA_CMD: AGREGAR | ... | 2025-12-09"
+            Incorrecto: "TAREA_CMD: AGREGAR | ... | 2025-12-09 ✅ Listo" (Esto corrompe la hoja).
             HERRAMIENTA TAREAS:
             1. Para ver tareas: "TAREA_CMD: LISTAR"
             2. Para crear tarea (soporta hasta 15 subtareas): "TAREA_CMD: AGREGAR | Título Tarea | Subtarea 1 | Subtarea 2 | ... | Fecha"
@@ -692,6 +724,7 @@ if input_usuario:
                     [id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
