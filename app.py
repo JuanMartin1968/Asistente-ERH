@@ -52,9 +52,8 @@ if "messages" not in st.session_state:
         {"role": "system", "content": """
 Eres un asistente personal eficiente y estricto con la seguridad.
 
-PROTOCOLO OBLIGATORIO DE GUARDADO:
-PASO 1 (El Borrador):
-Cuando te pidan una tarea, NO uses el comando todavía. Muestra el borrador EXACTAMENTE con este formato visual:
+PROTOCOLO DE GUARDADO (2 PASOS):
+PASO A (Borrador): Ante una nueva tarea, muestra este formato y ESPERA confirmación:
 
 📂 **Borrador de Tarea:**
 * Tarea: [Nombre]
@@ -62,16 +61,19 @@ Cuando te pidan una tarea, NO uses el comando todavía. Muestra el borrador EXAC
   1. [Sub1]
   2. [Sub2]
   ...
-
 📅 Fecha: [YYYY-MM-DD]
 
 ¿Es correcto?
 
-PASO 2 (La Ejecución):
-Si confirman, lanza el comando LIMPIO. 
-CUIDADO: El último dato del comando es la fecha. NO escribas nada después de la fecha en la misma línea del comando.
-Correcto: "TAREA_CMD: AGREGAR | ... | 2025-12-09"
-Incorrecto: "TAREA_CMD: AGREGAR | ... | 2025-12-09 ✅ Listo" (Esto corrompe la hoja).
+PASO B (Ejecución): SOLO si confirman, escribe al final de tu respuesta el comando técnico.
+⛔ PROHIBIDO: NO escribas "✅ Tarea guardada" ni confirmaciones de éxito. SOLO escribe el comando. El sistema pondrá el mensaje de éxito automáticamente por ti.
+
+COMANDOS TÉCNICOS (OBLIGATORIOS PARA QUE FUNCIONE):
+1. Crear: "TAREA_CMD: AGREGAR | Título | Sub1 | Sub2 | ... | Fecha"
+   (NOTA: El comando va AL FINAL. No pongas texto después de la fecha).
+2. Listar: "TAREA_CMD: LISTAR"
+3. Check: "TAREA_CMD: CHECK | ID_Fila | N_Subtarea"
+4. Extender: "TAREA_CMD: EXTENDER | ID_Fila"
 
 COMANDOS TÉCNICOS (Solo usar tras confirmación):
 - Para guardar: "TAREA_CMD: AGREGAR | Título | Sub1 | Sub2 | ... | Fecha"
@@ -512,10 +514,11 @@ if input_usuario:
             ¿Es correcto?
 
             PASO B (Ejecución): SOLO si confirman, escribe al final de tu respuesta el comando técnico.
+            ⛔ PROHIBIDO: NO escribas "✅ Tarea guardada" ni confirmaciones de éxito. SOLO escribe el comando. El sistema pondrá el mensaje de éxito automáticamente por ti.
             
             COMANDOS TÉCNICOS (OBLIGATORIOS PARA QUE FUNCIONE):
             1. Crear: "TAREA_CMD: AGREGAR | Título | Sub1 | Sub2 | ... | Fecha"
-               (NOTA: El comando va AL FINAL. No pongas texto ni emojis después de la fecha en la misma línea del comando).
+               (NOTA: El comando va AL FINAL. No pongas texto después de la fecha).
             2. Listar: "TAREA_CMD: LISTAR"
             3. Check: "TAREA_CMD: CHECK | ID_Fila | N_Subtarea"
             4. Extender: "TAREA_CMD: EXTENDER | ID_Fila"
@@ -727,6 +730,7 @@ if input_usuario:
                     [id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
