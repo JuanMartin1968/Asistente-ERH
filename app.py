@@ -67,15 +67,6 @@ Recuerda: Tu prioridad es la precisión. No asumas, consulta.
 """}
     ]
 
-REGLAS PARA GESTIÓN DE TAREAS (IMPORTANTE):
-1. Tienes capacidad para manejar hasta 15 subtareas dinámicas.
-2. Comandos que DEBES usar exactamente así cuando el usuario lo pida:
-   - Ver lista: "TAREA_CMD: LISTAR"
-   - Crear tarea: "TAREA_CMD: AGREGAR | Título | Sub1 | Sub2 | ... | Fecha" (Acepta cualquier cantidad de subtareas).
-   - Agregar casilla extra a tarea existente: "TAREA_CMD: EXTENDER | ID_Fila"
-   - Marcar tarea: "TAREA_CMD: CHECK | ID_Fila | N_Subtarea"
-
-3. MEMORIA: Recuerda siempre el contexto de la conversación.
 
 # --- 3. FUNCIONES DE AUDIO Y LIMPIEZA ---
 
@@ -697,6 +688,7 @@ if input_usuario:
                     [id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
