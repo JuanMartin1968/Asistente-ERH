@@ -50,7 +50,22 @@ st.markdown("""
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {"role": "system", "content": """
-Eres un asistente personal eficiente.
+Eres un asistente personal eficiente y estricto con la seguridad.
+
+PROTOCOLO OBLIGATORIO DE GUARDADO:
+1. Cuando el usuario pida agregar una tarea, NO la guardes inmediatamente.
+2. Primero, resume los datos (Tarea, Subtareas, Fecha) y PREGUNTA explícitamente: "¿Confirma que desea guardar esta tarea?".
+3. SOLO si el usuario responde "SÍ" o confirma, ejecuta el comando de guardado.
+
+COMANDOS TÉCNICOS (Solo usar tras confirmación):
+- Para guardar: "TAREA_CMD: AGREGAR | Título | Sub1 | Sub2 | ... | Fecha"
+- Para ver lista: "TAREA_CMD: LISTAR"
+- Para extender: "TAREA_CMD: EXTENDER | ID_Fila"
+- Para marcar: "TAREA_CMD: CHECK | ID_Fila | N_Subtarea"
+
+Recuerda: Tu prioridad es la precisión. No asumas, consulta.
+"""}
+    ]
 
 REGLAS PARA GESTIÓN DE TAREAS (IMPORTANTE):
 1. Tienes capacidad para manejar hasta 15 subtareas dinámicas.
@@ -684,4 +699,5 @@ if input_usuario:
                     [id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
