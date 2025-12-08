@@ -45,6 +45,25 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# --- INICIALIZACIÓN DE INSTRUCCIONES DEL SISTEMA ---
+# Esto asegura que el asistente sepa usar las 15 tareas y el comando EXTENDER
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {"role": "system", "content": """
+Eres un asistente personal eficiente.
+
+REGLAS PARA GESTIÓN DE TAREAS (IMPORTANTE):
+1. Tienes capacidad para manejar hasta 15 subtareas dinámicas.
+2. Comandos que DEBES usar exactamente así cuando el usuario lo pida:
+   - Ver lista: "TAREA_CMD: LISTAR"
+   - Crear tarea: "TAREA_CMD: AGREGAR | Título | Sub1 | Sub2 | ... | Fecha" (Acepta cualquier cantidad de subtareas).
+   - Agregar casilla extra a tarea existente: "TAREA_CMD: EXTENDER | ID_Fila"
+   - Marcar tarea: "TAREA_CMD: CHECK | ID_Fila | N_Subtarea"
+
+3. MEMORIA: Recuerda siempre el contexto de la conversación.
+"""}
+    ]
+
 # --- 3. FUNCIONES DE AUDIO Y LIMPIEZA ---
 
 
@@ -140,61 +159,108 @@ def enviar_correo_gmail(destinatario, asunto, cuerpo):
 
 # --- FUNCIONES DE GESTIÓN DE TAREAS (TABLA CORREGIDA + CÁLCULO) ---
 
-
 def gestionar_tareas(modo, datos=None):
     try:
         import json
+        import gspread
+        from oauth2client.service_account import ServiceAccountCredentials
+        import streamlit as st
+
         scope = ['https://www.googleapis.com/auth/spreadsheets',
                  'https://www.googleapis.com/auth/drive']
         creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS"], strict=False)
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(
-            creds_dict, scope)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
-        sheet = client.open_by_key(
-            st.secrets["SPREADSHEET_ID"]).worksheet("Tareas")
+        sheet = client.open_by_key(st.secrets["SPREADSHEET_ID"]).worksheet("Tareas")
 
         if modo == "LISTAR":
             registros = sheet.get_all_records()
             if not registros:
                 return "No hay tareas registradas."
 
-            # INICIO DE LA TABLA (Con salto de línea inicial clave)
             texto = "\n| ID | Tarea | Subtareas | Avance |\n| :---: | :--- | :--- | :---: |\n"
 
             for i, r in enumerate(registros, start=2):
-                # Leemos el estado real de las casillas
-                s1 = str(r.get('Subtarea 1')).upper() == "TRUE"
-                s2 = str(r.get('Subtarea 2')).upper() == "TRUE"
-                s3 = str(r.get('Subtarea 3')).upper() == "TRUE"
+                hechas = 0
+                total = 0
+                iconos = ""
 
-                # Iconos
-                c1 = "✅" if s1 else "⬜"
-                c2 = "✅" if s2 else "⬜"
-                c3 = "✅" if s3 else "⬜"
+                # Recorremos de la Subtarea 1 a la 15
+                for n in range(1, 16):
+                    clave = f"Subtarea {n}"
+                    valor = str(r.get(clave, "")).strip().upper()
 
-                # Cálculo matemático en Python (más seguro que Excel)
-                hechas = sum([s1, s2, s3])
-                porcentaje = f"{int((hechas/3)*100)}%"
+                    # Solo contamos si la celda NO está vacía
+                    if valor in ["TRUE", "FALSE"]:
+                        total += 1
+                        if valor == "TRUE":
+                            hechas += 1
+                            iconos += "✅ "
+                        else:
+                            iconos += "⬜ "
+                
+                # Evitar división por cero si no hay subtareas
+                porcentaje = "0%"
+                if total > 0:
+                    porcentaje = f"{int((hechas/total)*100)}%"
+                
+                if total == 0: iconos = "—"
 
-                # Fila de la tabla
-                texto += f"| **{i}** | {r.get('Tarea')} | {c1} {c2} {c3} | **{porcentaje}** |\n"
+                texto += f"| **{i}** | {r.get('Tarea')} | {iconos} | **{porcentaje}** |\n"
             return texto
 
         elif modo == "AGREGAR":
-            # Agregamos la tarea
-            fila = [datos[0], False, False, False, "", "Pendiente", datos[4]]
+            # datos: [Tarea, (n subtareas...), Fecha]
+            # Creamos fila con 15 espacios para subtareas
+            tarea = datos[0]
+            fecha = datos[-1]
+            cantidad_subs = len(datos) - 2 # Restamos Tarea y Fecha
+            
+            fila_subs = []
+            for k in range(15):
+                if k < cantidad_subs:
+                    fila_subs.append("FALSE") # Activa para contar
+                else:
+                    fila_subs.append("") # Vacía para ignorar
+
+            # Armamos la fila completa: Tarea + 15 Subs + Extras
+            fila = [tarea] + fila_subs + ["", "Pendiente", fecha]
             sheet.append_row(fila)
-            return "Tarea agregada."
+            return f"Tarea agregada con {cantidad_subs} subtareas."
 
         elif modo == "CHECK":
+            # datos[0] = Fila, datos[1] = Número de subtarea visual (1, 2, 3...)
             fila_idx = int(datos[0])
-            col_idx = int(datos[1]) + 1
+            sub_num = int(datos[1])
+            
+            # La columna 1 es Tarea, la 2 es Subtarea 1. 
+            # Por tanto: Columna = 1 + sub_num
+            col_idx = 1 + sub_num
+            
             sheet.update_cell(fila_idx, col_idx, True)
-            return "Listo. Avance actualizado."
+            return "Avance actualizado."
+            
+        elif modo == "ADD_SUB":
+            # Agrega una subtarea extra a una fila existente
+            fila_idx = int(datos[0])
+            row_vals = sheet.row_values(fila_idx)
+            
+            # Buscamos la primera columna vacía entre la 2 y la 16 (Subtareas)
+            col_destino = -1
+            for c in range(2, 17):
+                # Si la longitud de row_vals es menor que c, es que está vacío al final
+                if c > len(row_vals) or row_vals[c-1] == "":
+                    col_destino = c
+                    break
+            
+            if col_destino != -1:
+                sheet.update_cell(fila_idx, col_destino, "FALSE")
+                return "Subtarea adicional agregada."
+            else:
+                return "Máximo de 15 subtareas alcanzado."
 
     except Exception as e:
         return f"Error: {str(e)}"
-
 
 # --- 5. CEREBRO Y AUTODETECCIÓN ---
 try:
@@ -411,12 +477,15 @@ if input_usuario:
             TUS HERRAMIENTAS (TIENES PERMISO TOTAL PARA USARLAS):
 
             1. TAREAS Y PROYECTOS (PRIORIDAD):
-            - Para ver tareas: "TAREA_CMD: LISTAR"
-            - Para crear tarea: "TAREA_CMD: AGREGAR | Tarea | Sub1 | Sub2 | Sub3 | FechaFin"
-              (Si no hay subtareas, pon un guion "-")
-            - Para marcar avance: "TAREA_CMD: CHECK | NumeroFila | NumeroSubtarea(1,2,3)"
-              (Primero LISTA las tareas para saber el Número de Fila, luego marca).
-
+            HERRAMIENTA TAREAS:
+            1. Para ver tareas: "TAREA_CMD: LISTAR"
+            2. Para crear tarea (soporta hasta 15 subtareas): "TAREA_CMD: AGREGAR | Título Tarea | Subtarea 1 | Subtarea 2 | ... | Fecha"
+               (Ejemplo: "TAREA_CMD: AGREGAR | Informe | Buscar datos | Redactar | Revisar | 2025-12-07")
+            3. Para marcar una casilla: "TAREA_CMD: CHECK | ID_Fila | N_Subtarea"
+               (Ejemplo: "TAREA_CMD: CHECK | 2 | 1" marca la primera casilla de la fila 2).
+            4. Para agregar una subtarea extra a una tarea ya creada: "TAREA_CMD: EXTENDER | ID_Fila"
+               (Esto agrega una casilla vacía al final de esa tarea y recalcula el porcentaje).
+              
             2. PARA AGENDAR EN CALENDARIO:
             CALENDAR_CMD: Título | YYYY-MM-DD HH:MM | YYYY-MM-DD HH:MM | Nota | RRULE
             * RRULE Ejemplos: 
@@ -558,11 +627,11 @@ if input_usuario:
         except:
             pass
 
-  # --- LOGICA TAREAS ---
+# --- LOGICA TAREAS ---
     if "TAREA_CMD:" in respuesta_texto:
         try:
             parts = respuesta_texto.split("TAREA_CMD:")
-            respuesta_texto = parts[0].strip()  # Limpia la respuesta visual
+            respuesta_texto = parts[0].strip()
             cmd_full = parts[1].strip().split("|")
             accion = cmd_full[0].strip()
 
@@ -570,20 +639,25 @@ if input_usuario:
                 res = gestionar_tareas("LISTAR")
                 respuesta_texto += f"\n\n📋 {res}"
 
-            elif accion == "AGREGAR" and len(cmd_full) >= 6:
-                # AGREGAR | Tarea | Sub1 | Sub2 | Sub3 | Fecha
-                res = gestionar_tareas(
-                    "AGREGAR", [cmd_full[1], cmd_full[2], cmd_full[3], cmd_full[4], cmd_full[5]])
+            elif accion == "AGREGAR":
+                # Captura dinámicamente: Tarea | Sub1 | ... | Fecha
+                datos_tarea = [x.strip() for x in cmd_full[1:]]
+                res = gestionar_tareas("AGREGAR", datos_tarea)
                 respuesta_texto += f"\n\n✅ {res}"
 
             elif accion == "CHECK" and len(cmd_full) >= 3:
-                # CHECK | Fila | Subtarea
+                # CHECK | ID_Fila | N_Subtarea
                 res = gestionar_tareas("CHECK", [cmd_full[1], cmd_full[2]])
                 respuesta_texto += f"\n\n📈 {res}"
 
+            elif accion == "EXTENDER" and len(cmd_full) >= 2:
+                # EXTENDER | ID_Fila (Agrega una casilla vacía extra al final)
+                res = gestionar_tareas("ADD_SUB", [cmd_full[1]])
+                respuesta_texto += f"\n\n➕ {res}"
+
         except Exception as e:
             respuesta_texto += f"\n\n❌ Error procesando tarea: {str(e)}"
-
+  
     # C. RESPUESTA FINAL
     with st.chat_message("assistant", avatar=avatar_bot):
         st.markdown(respuesta_texto)
@@ -610,3 +684,4 @@ if input_usuario:
                     [id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
