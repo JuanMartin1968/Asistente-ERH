@@ -520,30 +520,25 @@ if input_usuario:
             TUS HERRAMIENTAS (TIENES PERMISO TOTAL PARA USARLAS):
 
             1. TAREAS Y PROYECTOS (PRIORIDAD):
-            
-            PROTOCOLO DE GUARDADO (2 PASOS):
-            PASO A (Borrador): Ante una nueva tarea, muestra este formato y ESPERA confirmación:
-            
-            📂 **Borrador de Tarea:**
-            * Tarea: [Nombre]
-            * Subtareas:
-              1. [Sub1]
-              2. [Sub2]
-              ...
-            📅 Fecha: [YYYY-MM-DD]
-            
-            ¿Es correcto?
 
-            PASO B (Ejecución): SOLO si confirman, escribe al final de tu respuesta el comando técnico.
-            ⛔ PROHIBIDO: NO escribas "✅ Tarea guardada" ni confirmaciones de éxito. SOLO escribe el comando. El sistema pondrá el mensaje de éxito automáticamente por ti.
-            
-            COMANDOS TÉCNICOS (OBLIGATORIOS PARA QUE FUNCIONE):
-            1. Crear: "TAREA_CMD: AGREGAR | Título | Sub1 | Sub2 | ... | Fecha"
-               (NOTA: El comando va AL FINAL. No pongas texto después de la fecha).
-            2. Listar: "TAREA_CMD: LISTAR"
-            3. Check: "TAREA_CMD: CHECK | ID_Fila | N_Subtarea"
-            4. Extender: "TAREA_CMD: EXTENDER | ID_Fila"
+            PROTOCOLO DE GUARDADO (OBLIGATORIO):
+            PASO 1 (Borrador): Antes de guardar, muestra el borrador y PREGUNTA "¿Es correcto?".
+            PASO 2 (Ejecución): SOLO si confirman, escribe el comando técnico en la última línea.
+            ⛔ PROHIBIDO: NO escribas "Comando Técnico:", ni "Aquí está el comando", ni "✅ Tarea guardada". Escribe SOLO el código TAREA_CMD.
 
+            HERRAMIENTA TAREAS (Instrucciones Técnicas):
+            1. Para ver tareas: "TAREA_CMD: LISTAR"
+            
+            2. Para crear tarea (soporta hasta 15 subtareas): "TAREA_CMD: AGREGAR | [Titulo] | [Sub1] | [Sub2] | ... | [Fecha]"
+               (Ejemplo: "TAREA_CMD: AGREGAR | Proyecto Alpha | Fase 1 | Fase 2 | 2025-12-09")
+               *NOTA: Usa los datos reales del usuario. La fecha va al final.
+            
+            3. Para marcar una casilla: "TAREA_CMD: CHECK | ID_Fila | N_Subtarea"
+               (Ejemplo: "TAREA_CMD: CHECK | 2 | 1" marca la primera casilla de la fila 2).
+            
+            4. Para agregar una subtarea extra a una tarea ya creada: "TAREA_CMD: EXTENDER | ID_Fila"
+               (Esto agrega una casilla vacía al final de esa tarea y recalcula el porcentaje).
+            
             HERRAMIENTA TAREAS:
             1. Para ver tareas: "TAREA_CMD: LISTAR"
             2. Para crear tarea (soporta hasta 15 subtareas): "TAREA_CMD: AGREGAR | Título Tarea | Subtarea 1 | Subtarea 2 | ... | Fecha"
@@ -751,6 +746,7 @@ if input_usuario:
                     [id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
