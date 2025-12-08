@@ -284,7 +284,7 @@ def gestionar_tareas(modo, datos=None):
     except Exception as e:
         return f"Error: {str(e)}"
 
-# --- 5. CEREBRO Y AUTODETECCIÓN (FILTRO 1.5 PRO) ---
+# --- 5. CEREBRO Y AUTODETECCIÓN (SELECTOR INTELIGENTE) ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"].strip()
 except:
@@ -299,30 +299,35 @@ def detectar_modelo_real(key):
         
         if response.status_code == 200:
             data = response.json()
-            modelos = data.get('models', [])
-            
-            # BUSCAMOS EXCLUSIVAMENTE LA FAMILIA "1.5 PRO"
-            # (Evitamos el 2.0 y 2.5 que tienen cuota 0)
-            for m in modelos:
+            # 1. Creamos una lista de "Candidatos Seguros"
+            # Eliminamos los que te dieron error de cuota (2.5, 2.0, exp)
+            candidatos = []
+            for m in data.get('models', []):
                 name = m.get('name', '')
-                # Debe contener "1.5-pro"
-                if 'gemini-1.5-pro' in name:
-                    # Filtro extra: Evitar versiones experimentales inestables si existen
-                    if 'exp' not in name:
-                        return name
+                if 'generateContent' in m.get('supportedGenerationMethods', []):
+                    # FILTRO: Nada de "exp", nada de "2.0", nada de "2.5"
+                    if 'exp' not in name and '2.0' not in name and '2.5' not in name:
+                        candidatos.append(name)
             
-            # Si no encuentra ningún 1.5 Pro, caerá aquí (pero debería encontrarlo)
-            # Retorno de seguridad: 1.5 Flash
-            for m in modelos:
-                name = m.get('name', '')
-                if 'gemini-1.5-flash' in name and 'exp' not in name:
-                    return name
+            # 2. De los seguros, buscamos el PRO (El astuto)
+            for c in candidatos:
+                if 'gemini-1.5-pro' in c:
+                    return c
+            
+            # 3. Si no hay Pro, buscamos el Flash (Respaldo)
+            for c in candidatos:
+                if 'gemini-1.5-flash' in c:
+                    return c
+            
+            # 4. Si no hay ni Pro ni Flash, agarramos el primero que funcione
+            if candidatos:
+                return candidatos[0]
 
     except:
         pass
         
-    # Último recurso si falla la conexión
-    return "models/gemini-1.5-flash"
+    # Solo si falla la conexión a internet usamos este (es el nombre estándar más común)
+    return "models/gemini-pro"
 
 modelo_activo = detectar_modelo_real(api_key)
 
@@ -746,6 +751,7 @@ if input_usuario:
                     [id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
