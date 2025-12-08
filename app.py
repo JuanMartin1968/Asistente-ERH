@@ -284,7 +284,7 @@ def gestionar_tareas(modo, datos=None):
     except Exception as e:
         return f"Error: {str(e)}"
 
-# --- 5. CEREBRO Y AUTODETECCIÓN (SIN ADIVINAR) ---
+# --- 5. CEREBRO Y AUTODETECCIÓN (FILTRO 1.5 PRO) ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"].strip()
 except:
@@ -294,7 +294,6 @@ except:
 @st.cache_data
 def detectar_modelo_real(key):
     try:
-        # 1. Pedimos la lista real a Google
         url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
         response = requests.get(url)
         
@@ -302,29 +301,30 @@ def detectar_modelo_real(key):
             data = response.json()
             modelos = data.get('models', [])
             
-            # 2. Buscamos el PRO (Inteligente) evitando los experimentales (Cuota 0)
+            # BUSCAMOS EXCLUSIVAMENTE LA FAMILIA "1.5 PRO"
+            # (Evitamos el 2.0 y 2.5 que tienen cuota 0)
             for m in modelos:
-                nombre = m.get('name', '')
-                # Busca que diga "pro" y evita "exp" (experimental) y "vision" (solo fotos)
-                if 'pro' in nombre and 'exp' not in nombre and 'vision' not in nombre:
-                    return nombre # Devuelve el nombre EXACTO que tu cuenta permite
+                name = m.get('name', '')
+                # Debe contener "1.5-pro"
+                if 'gemini-1.5-pro' in name:
+                    # Filtro extra: Evitar versiones experimentales inestables si existen
+                    if 'exp' not in name:
+                        return name
+            
+            # Si no encuentra ningún 1.5 Pro, caerá aquí (pero debería encontrarlo)
+            # Retorno de seguridad: 1.5 Flash
+            for m in modelos:
+                name = m.get('name', '')
+                if 'gemini-1.5-flash' in name and 'exp' not in name:
+                    return name
 
-            # 3. Si no hay PRO, buscamos el FLASH (Rápido) estable
-            for m in modelos:
-                nombre = m.get('name', '')
-                if 'flash' in nombre and 'exp' not in nombre and '8b' not in nombre:
-                    return nombre
-                    
     except:
         pass
         
-    # Fallback final: Si falla la conexión, probamos el alias más genérico posible
-    return "models/gemini-pro"
+    # Último recurso si falla la conexión
+    return "models/gemini-1.5-flash"
 
 modelo_activo = detectar_modelo_real(api_key)
-
-# Mostramos en pantalla qué modelo se seleccionó para verificar (Solo informativo)
-# st.write(f"Modelo conectado: {modelo_activo}") 
 
 def get_hora_peru():
     # Hora de Lima (UTC-5)
@@ -746,6 +746,7 @@ if input_usuario:
                     [id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
