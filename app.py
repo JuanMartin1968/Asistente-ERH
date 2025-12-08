@@ -497,9 +497,9 @@ if input_usuario:
             TUS HERRAMIENTAS (TIENES PERMISO TOTAL PARA USARLAS):
 
             1. TAREAS Y PROYECTOS (PRIORIDAD):
-            PROTOCOLO OBLIGATORIO DE GUARDADO:
-            PASO 1 (El Borrador):
-            Cuando te pidan una tarea, NO uses el comando todavía. Muestra el borrador EXACTAMENTE con este formato visual:
+            
+            PROTOCOLO DE GUARDADO (2 PASOS):
+            PASO A (Borrador): Ante una nueva tarea, muestra este formato y ESPERA confirmación:
             
             📂 **Borrador de Tarea:**
             * Tarea: [Nombre]
@@ -507,16 +507,19 @@ if input_usuario:
               1. [Sub1]
               2. [Sub2]
               ...
-            
             📅 Fecha: [YYYY-MM-DD]
             
             ¿Es correcto?
 
-            PASO 2 (La Ejecución):
-            Si confirman, lanza el comando LIMPIO. 
-            CUIDADO: El último dato del comando es la fecha. NO escribas nada después de la fecha en la misma línea del comando.
-            Correcto: "TAREA_CMD: AGREGAR | ... | 2025-12-09"
-            Incorrecto: "TAREA_CMD: AGREGAR | ... | 2025-12-09 ✅ Listo" (Esto corrompe la hoja).
+            PASO B (Ejecución): SOLO si confirman, escribe al final de tu respuesta el comando técnico.
+            
+            COMANDOS TÉCNICOS (OBLIGATORIOS PARA QUE FUNCIONE):
+            1. Crear: "TAREA_CMD: AGREGAR | Título | Sub1 | Sub2 | ... | Fecha"
+               (NOTA: El comando va AL FINAL. No pongas texto ni emojis después de la fecha en la misma línea del comando).
+            2. Listar: "TAREA_CMD: LISTAR"
+            3. Check: "TAREA_CMD: CHECK | ID_Fila | N_Subtarea"
+            4. Extender: "TAREA_CMD: EXTENDER | ID_Fila"
+
             HERRAMIENTA TAREAS:
             1. Para ver tareas: "TAREA_CMD: LISTAR"
             2. Para crear tarea (soporta hasta 15 subtareas): "TAREA_CMD: AGREGAR | Título Tarea | Subtarea 1 | Subtarea 2 | ... | Fecha"
@@ -724,6 +727,7 @@ if input_usuario:
                     [id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
