@@ -284,7 +284,7 @@ def gestionar_tareas(modo, datos=None):
     except Exception as e:
         return f"Error: {str(e)}"
 
-# --- 5. CEREBRO Y AUTODETECCIÓN (RESTAURADO) ---
+# --- 5. CEREBRO Y AUTODETECCIÓN (CON FILTRO ANTI-EXPERIMENTAL) ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"].strip()
 except:
@@ -298,20 +298,28 @@ def detectar_modelo_real(key):
         response = requests.get(url)
         if response.status_code == 200:
             data = response.json()
-            # 1. Buscamos explícitamente el 'gemini-1.5-flash' (Estable y Alta Cuota)
-            for m in data.get('models', []):
-                name = m.get('name', '')
-                if 'gemini-1.5-flash' in name and 'latest' not in name:
-                    return name
+            modelos = data.get('models', [])
             
-            # 2. Si no encuentra el exacto, busca cualquiera que sirva PERO ignorando el 2.5 (que falla)
-            for m in data.get('models', []):
+            # 1. BÚSQUEDA PRIORITARIA: El modelo estable exacto
+            # Buscamos 'gemini-1.5-flash-001' o 'gemini-1.5-flash-latest' que son los sólidos.
+            for m in modelos:
+                name = m.get('name', '')
+                if 'gemini-1.5-flash' in name and 'exp' not in name and '002' not in name:
+                     return name
+
+            # 2. BÚSQUEDA SECUNDARIA (Si falla la primera):
+            # Cualquier cosa que sea 1.5, pero PROHIBIDO usar 2.0, 2.5 o experimentales.
+            for m in modelos:
+                name = m.get('name', '')
                 if 'generateContent' in m.get('supportedGenerationMethods', []):
-                    if '2.5' not in m.get('name', ''): # FILTRO ANTI-ERROR 429
-                        return m['name']
+                    # FILTRO DE SEGURIDAD:
+                    if 'exp' not in name and '2.0' not in name and '2.5' not in name:
+                        return name
+                        
     except:
         pass
-    # Fallback final (si todo falla, probamos el estándar)
+    
+    # Si todo falla, regresamos al clásico que suele funcionar siempre
     return "models/gemini-1.5-flash"
 
 modelo_activo = detectar_modelo_real(api_key)
@@ -736,6 +744,7 @@ if input_usuario:
                     [id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
