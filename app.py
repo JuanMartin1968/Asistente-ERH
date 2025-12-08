@@ -481,6 +481,10 @@ if input_usuario:
             TUS HERRAMIENTAS (TIENES PERMISO TOTAL PARA USARLAS):
 
             1. TAREAS Y PROYECTOS (PRIORIDAD):
+            PROTOCOLO OBLIGATORIO DE GUARDADO:
+            - Paso 1: Si el usuario pide crear una tarea, NO uses el comando AGREGAR todavía. Muestra un resumen y pregunta: "¿Confirma guardar?".
+            - Paso 2: Si el usuario confirma, ENTONCES y SOLO ENTONCES ejecuta el comando "TAREA_CMD: AGREGAR...".
+            (Si respondes "Listo" sin escribir el comando, la tarea NO se guardará).
             HERRAMIENTA TAREAS:
             1. Para ver tareas: "TAREA_CMD: LISTAR"
             2. Para crear tarea (soporta hasta 15 subtareas): "TAREA_CMD: AGREGAR | Título Tarea | Subtarea 1 | Subtarea 2 | ... | Fecha"
@@ -688,6 +692,7 @@ if input_usuario:
                     [id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
