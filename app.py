@@ -76,8 +76,6 @@ REGLAS PARA GESTIÓN DE TAREAS (IMPORTANTE):
    - Marcar tarea: "TAREA_CMD: CHECK | ID_Fila | N_Subtarea"
 
 3. MEMORIA: Recuerda siempre el contexto de la conversación.
-}
-    ]
 
 # --- 3. FUNCIONES DE AUDIO Y LIMPIEZA ---
 
@@ -699,6 +697,7 @@ if input_usuario:
                     [id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
