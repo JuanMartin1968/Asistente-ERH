@@ -284,16 +284,37 @@ def gestionar_tareas(modo, datos=None):
     except Exception as e:
         return f"Error: {str(e)}"
 
-# --- 5. CEREBRO Y AUTODETECCIÓN ---
+# --- 5. CEREBRO Y AUTODETECCIÓN (RESTAURADO) ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"].strip()
 except:
     st.error("Falta API Key")
     st.stop()
 
-# CAMBIO CRÍTICO: Forzamos el modelo 1.5 Flash (1500 mensajes/día)
-# y eliminamos la función de autodetección que causaba el error 429.
-modelo_activo = "models/gemini-1.5-flash-002"
+@st.cache_data
+def detectar_modelo_real(key):
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            # 1. Buscamos explícitamente el 'gemini-1.5-flash' (Estable y Alta Cuota)
+            for m in data.get('models', []):
+                name = m.get('name', '')
+                if 'gemini-1.5-flash' in name and 'latest' not in name:
+                    return name
+            
+            # 2. Si no encuentra el exacto, busca cualquiera que sirva PERO ignorando el 2.5 (que falla)
+            for m in data.get('models', []):
+                if 'generateContent' in m.get('supportedGenerationMethods', []):
+                    if '2.5' not in m.get('name', ''): # FILTRO ANTI-ERROR 429
+                        return m['name']
+    except:
+        pass
+    # Fallback final (si todo falla, probamos el estándar)
+    return "models/gemini-1.5-flash"
+
+modelo_activo = detectar_modelo_real(api_key)
 
 def get_hora_peru():
     # Hora de Lima (UTC-5)
@@ -715,5 +736,6 @@ if input_usuario:
                     [id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
