@@ -291,24 +291,9 @@ except:
     st.error("Falta API Key")
     st.stop()
 
-
-@st.cache_data
-def detectar_modelo_real(key):
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
-        response = requests.get(url)
-        if response.status_code == 200:
-            data = response.json()
-            for m in data.get('models', []):
-                if 'generateContent' in m.get('supportedGenerationMethods', []):
-                    return m['name']
-    except:
-        pass
-    return "models/gemini-1.5-flash"
-
-
-modelo_activo = detectar_modelo_real(api_key)
-
+# CAMBIO CRÍTICO: Forzamos el modelo 1.5 Flash (1500 mensajes/día)
+# y eliminamos la función de autodetección que causaba el error 429.
+modelo_activo = "gemini-1.5-flash"
 
 def get_hora_peru():
     # Hora de Lima (UTC-5)
@@ -730,12 +715,3 @@ if input_usuario:
                     [id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
-
-
-
-
-
-
-
-
-
