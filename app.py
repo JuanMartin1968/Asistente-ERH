@@ -284,16 +284,41 @@ def gestionar_tareas(modo, datos=None):
     except Exception as e:
         return f"Error: {str(e)}"
 
-# --- 5. CEREBRO (MODELO PRO: INTELIGENTE PERO LIMITADO) ---
+# --- 5. CEREBRO Y AUTODETECCIÓN (BUSCADOR DE MODELO PRO) ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"].strip()
 except:
     st.error("Falta API Key")
     st.stop()
 
-# Usamos la versión PRO (Inteligente).
-# ADVERTENCIA: Tiene límite de uso diario (aprox 50 peticiones).
-modelo_activo = "models/gemini-1.5-pro"
+@st.cache_data
+def detectar_modelo_real(key):
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            modelos = data.get('models', [])
+            
+            # BUSCAMOS EL "PRO" PERO EVITAMOS LOS "EXPERIMENTAL" (CUOTA 0)
+            for m in modelos:
+                name = m.get('name', '')
+                # Buscamos que diga "1.5-pro" y que NO diga "exp"
+                if 'gemini-1.5-pro' in name and 'exp' not in name:
+                    return name
+            
+            # Si no encuentra el PRO, intentamos el FLASH como respaldo
+            for m in modelos:
+                name = m.get('name', '')
+                if 'gemini-1.5-flash' in name and 'exp' not in name:
+                    return name
+                    
+    except:
+        pass
+    # Nombre de respaldo final si todo falla
+    return "models/gemini-1.5-flash"
+
+modelo_activo = detectar_modelo_real(api_key)
 
 def get_hora_peru():
     # Hora de Lima (UTC-5)
@@ -715,6 +740,7 @@ if input_usuario:
                     [id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
 
 
 
