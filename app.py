@@ -293,7 +293,7 @@ except:
 
 # CAMBIO CRÍTICO: Forzamos el modelo 1.5 Flash (1500 mensajes/día)
 # y eliminamos la función de autodetección que causaba el error 429.
-modelo_activo = "gemini-1.5-flash"
+modelo_activo = "models/gemini-1.5-flash"
 
 def get_hora_peru():
     # Hora de Lima (UTC-5)
@@ -715,3 +715,4 @@ if input_usuario:
                     [id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
+
