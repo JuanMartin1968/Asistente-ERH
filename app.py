@@ -24,22 +24,22 @@ st.markdown("""
     /* DERECHA (Panel Principal) */
     .stApp { background-color: #FAF5FF !important; color: #000000 !important; }
     .stMarkdown p, h1, h2, h3, div, span, li, label { color: #000000 !important; }
-    
+
     /* BARRA LATERAL (Izquierda) */
     [data-testid="stSidebar"] { background-color: #1a0b2e !important; }
     /* Texto general blanco */
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
-    
+
     /* EXCEPCIÓN: Botón "Browse files" (letras negras para que se vea) */
     [data-testid="stFileUploader"] button { color: #000000 !important; }
-    
+
     /* INPUTS */
     .stTextInput > div > div > input { background-color: #FFFFFF !important; color: #000000 !important; border: 1px solid #D1C4E9 !important; }
     .stButton > button { background-color: #6A1B9A !important; color: white !important; border: none !important; }
-    
+
     /* CHAT */
     .stChatMessage { background-color: #FFFFFF !important; border: 1px solid #E1BEE7 !important; color: #000000 !important; }
-    
+
     /* Estilo para el input de audio */
     [data-testid="stAudioInput"] { margin-bottom: 20px; }
 </style>
@@ -50,41 +50,36 @@ st.markdown("""
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {"role": "system", "content": """
-Eres un asistente personal eficiente y estricto con la seguridad.
+        Eres un asistente personal eficiente y estricto con la seguridad.
 
-PROTOCOLO DE GUARDADO (2 PASOS):
-PASO A (Borrador): Ante una nueva tarea, muestra este formato y ESPERA confirmación:
+        PROTOCOLO OBLIGATORIO DE GUARDADO:
+        1. Cuando el usuario pida agregar una tarea, NO la guardes inmediatamente.
+        2. Primero, resume los datos (Tarea, Subtareas, Fecha) y PREGUNTA explícitamente: "¿Confirma que desea guardar esta tarea?".
+        3. SOLO si el usuario responde "SÍ" o confirma, ejecuta el comando de guardado.
 
-📂 **Borrador de Tarea:**
-* Tarea: [Nombre]
-* Subtareas:
-  1. [Sub1]
-  2. [Sub2]
-  ...
-📅 Fecha: [YYYY-MM-DD]
+        COMANDOS TÉCNICOS (Solo usar tras confirmación):
+        - Para guardar: "TAREA_CMD: AGREGAR | Título | Sub1 | Sub2 | ... | Fecha"
+        - Para ver lista: "TAREA_CMD: LISTAR"
+        - Para extender: "TAREA_CMD: EXTENDER | ID_Fila"
+        - Para marcar: "TAREA_CMD: CHECK | ID_Fila | N_Subtarea"
 
-¿Es correcto?
+        Recuerda: Tu prioridad es la precisión. No asumas, consulta.
+        """}
+            ]
 
-PASO B (Ejecución): SOLO si confirman, escribe al final de tu respuesta el comando técnico.
-⛔ PROHIBIDO: NO escribas "✅ Tarea guardada" ni confirmaciones de éxito. SOLO escribe el comando. El sistema pondrá el mensaje de éxito automáticamente por ti.
 
-COMANDOS TÉCNICOS (OBLIGATORIOS PARA QUE FUNCIONE):
-1. Crear: "TAREA_CMD: AGREGAR | Título | Sub1 | Sub2 | ... | Fecha"
-   (NOTA: El comando va AL FINAL. No pongas texto después de la fecha).
-2. Listar: "TAREA_CMD: LISTAR"
-3. Check: "TAREA_CMD: CHECK | ID_Fila | N_Subtarea"
-4. Extender: "TAREA_CMD: EXTENDER | ID_Fila"
+REGLAS PARA GESTIÓN DE TAREAS(IMPORTANTE):
 
-COMANDOS TÉCNICOS (Solo usar tras confirmación):
-- Para guardar: "TAREA_CMD: AGREGAR | Título | Sub1 | Sub2 | ... | Fecha"
-- Para ver lista: "TAREA_CMD: LISTAR"
-- Para extender: "TAREA_CMD: EXTENDER | ID_Fila"
-- Para marcar: "TAREA_CMD: CHECK | ID_Fila | N_Subtarea"
+1. Tienes capacidad para manejar hasta 15 subtareas dinámicas.
+2. Comandos que DEBES usar exactamente así cuando el usuario lo pida:
+   - Ver lista: "TAREA_CMD: LISTAR"
+   - Crear tarea: "TAREA_CMD: AGREGAR | Título | Sub1 | Sub2 | ... | Fecha" (Acepta cualquier cantidad de subtareas).
+   - Agregar casilla extra a tarea existente: "TAREA_CMD: EXTENDER | ID_Fila"
+   - Marcar tarea: "TAREA_CMD: CHECK | ID_Fila | N_Subtarea"
 
-Recuerda: Tu prioridad es la precisión. No asumas, consulta.
+3. MEMORIA: Recuerda siempre el contexto de la conversación.
 """}
     ]
-
 
 # --- 3. FUNCIONES DE AUDIO Y LIMPIEZA ---
 
@@ -124,7 +119,6 @@ def obtener_credenciales():
     except:
         return None
 
-
 def conectar_memoria(creds):
     try:
         client = gspread.authorize(creds)
@@ -132,7 +126,6 @@ def conectar_memoria(creds):
         return wb.sheet1, wb.worksheet("Perfil")
     except:
         return None, None
-
 
 def crear_evento_calendario(creds, resumen, inicio_iso, fin_iso, nota_alerta="", recurrence=None):
     try:
@@ -191,9 +184,11 @@ def gestionar_tareas(modo, datos=None):
         scope = ['https://www.googleapis.com/auth/spreadsheets',
                  'https://www.googleapis.com/auth/drive']
         creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS"], strict=False)
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(
+            creds_dict, scope)
         client = gspread.authorize(creds)
-        sheet = client.open_by_key(st.secrets["SPREADSHEET_ID"]).worksheet("Tareas")
+        sheet = client.open_by_key(
+            st.secrets["SPREADSHEET_ID"]).worksheet("Tareas")
 
         if modo == "LISTAR":
             registros = sheet.get_all_records()
@@ -220,12 +215,12 @@ def gestionar_tareas(modo, datos=None):
                             iconos += "✅ "
                         else:
                             iconos += "⬜ "
-                
+
                 # Evitar división por cero si no hay subtareas
                 porcentaje = "0%"
                 if total > 0:
                     porcentaje = f"{int((hechas/total)*100)}%"
-                
+
                 if total == 0: iconos = "—"
 
                 texto += f"| **{i}** | {r.get('Tarea')} | {iconos} | **{porcentaje}** |\n"
@@ -237,7 +232,7 @@ def gestionar_tareas(modo, datos=None):
             tarea = datos[0]
             fecha = datos[-1]
             cantidad_subs = len(datos) - 2 # Restamos Tarea y Fecha
-            
+
             fila_subs = []
             for k in range(15):
                 if k < cantidad_subs:
@@ -254,19 +249,19 @@ def gestionar_tareas(modo, datos=None):
             # datos[0] = Fila, datos[1] = Número de subtarea visual (1, 2, 3...)
             fila_idx = int(datos[0])
             sub_num = int(datos[1])
-            
-            # La columna 1 es Tarea, la 2 es Subtarea 1. 
+
+            # La columna 1 es Tarea, la 2 es Subtarea 1.
             # Por tanto: Columna = 1 + sub_num
             col_idx = 1 + sub_num
-            
+
             sheet.update_cell(fila_idx, col_idx, True)
             return "Avance actualizado."
-            
+
         elif modo == "ADD_SUB":
             # Agrega una subtarea extra a una fila existente
             fila_idx = int(datos[0])
             row_vals = sheet.row_values(fila_idx)
-            
+
             # Buscamos la primera columna vacía entre la 2 y la 16 (Subtareas)
             col_destino = -1
             for c in range(2, 17):
@@ -274,7 +269,7 @@ def gestionar_tareas(modo, datos=None):
                 if c > len(row_vals) or row_vals[c-1] == "":
                     col_destino = c
                     break
-            
+
             if col_destino != -1:
                 sheet.update_cell(fila_idx, col_destino, "FALSE")
                 return "Subtarea adicional agregada."
@@ -284,52 +279,31 @@ def gestionar_tareas(modo, datos=None):
     except Exception as e:
         return f"Error: {str(e)}"
 
-# --- 5. CEREBRO Y AUTODETECCIÓN (SELECTOR INTELIGENTE) ---
+
+# --- 5. CEREBRO Y AUTODETECCIÓN ---
 try:
     api_key = st.secrets["GEMINI_API_KEY"].strip()
 except:
     st.error("Falta API Key")
     st.stop()
 
+
 @st.cache_data
 def detectar_modelo_real(key):
     try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
         response = requests.get(url)
-        
         if response.status_code == 200:
             data = response.json()
-            # 1. Creamos una lista de "Candidatos Seguros"
-            # Eliminamos los que te dieron error de cuota (2.5, 2.0, exp)
-            candidatos = []
             for m in data.get('models', []):
-                name = m.get('name', '')
                 if 'generateContent' in m.get('supportedGenerationMethods', []):
-                    # FILTRO: Nada de "exp", nada de "2.0", nada de "2.5"
-                    if 'exp' not in name and '2.0' not in name and '2.5' not in name:
-                        candidatos.append(name)
-            
-            # 2. De los seguros, buscamos el PRO (El astuto)
-            for c in candidatos:
-                if 'gemini-1.5-pro' in c:
-                    return c
-            
-            # 3. Si no hay Pro, buscamos el Flash (Respaldo)
-            for c in candidatos:
-                if 'gemini-1.5-flash' in c:
-                    return c
-            
-            # 4. Si no hay ni Pro ni Flash, agarramos el primero que funcione
-            if candidatos:
-                return candidatos[0]
-
+                    return m['name']
     except:
         pass
-        
-    # Solo si falla la conexión a internet usamos este (es el nombre estándar más común)
-    return "models/gemini-pro"
+    return "models/gemini-1.5-flash"
 
 modelo_activo = detectar_modelo_real(api_key)
+
 
 def get_hora_peru():
     # Hora de Lima (UTC-5)
@@ -454,6 +428,7 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
+
     # 5. Botón Cargar Más (RECUPERADO)
     st.write("---")
     if st.button("🔄 Cargar más antiguos"):
@@ -513,47 +488,30 @@ if input_usuario:
         if es_personal:
             sys_context = f"""
             INSTRUCCIONES: Eres un asistente personal leal y eficiente. NO menciones limitaciones de IA.
-            HORA OFICIAL PERÚ (UTC-5): {hora_peru_str}
+            HORA OFICIAL PERÚ(UTC-5): {hora_peru_str}
             PERFIL USUARIO: {perfil_texto}
             MEMORIA RECIENTE: {historial}
 
-            TUS HERRAMIENTAS (TIENES PERMISO TOTAL PARA USARLAS):
+            TUS HERRAMIENTAS(TIENES PERMISO TOTAL PARA USARLAS):
 
-            1. TAREAS Y PROYECTOS (PRIORIDAD):
+            1. TAREAS Y PROYECTOS(PRIORIDAD):
 
-            PROTOCOLO DE GUARDADO (OBLIGATORIO):
-            PASO 1 (Borrador): Antes de guardar, muestra el borrador y PREGUNTA "¿Es correcto?".
-            PASO 2 (Ejecución): SOLO si confirman, escribe el comando técnico en la última línea.
-            ⛔ PROHIBIDO: NO escribas "Comando Técnico:", ni "Aquí está el comando", ni "✅ Tarea guardada". Escribe SOLO el código TAREA_CMD.
-
-            HERRAMIENTA TAREAS (Instrucciones Técnicas):
-            1. Para ver tareas: "TAREA_CMD: LISTAR"
-            
-            2. Para crear tarea (soporta hasta 15 subtareas): "TAREA_CMD: AGREGAR | [Titulo] | [Sub1] | [Sub2] | ... | [Fecha]"
-               (Ejemplo: "TAREA_CMD: AGREGAR | Proyecto Alpha | Fase 1 | Fase 2 | 2025-12-09")
-               *NOTA: Usa los datos reales del usuario. La fecha va al final.
-            
-            3. Para marcar una casilla: "TAREA_CMD: CHECK | ID_Fila | N_Subtarea"
-               (Ejemplo: "TAREA_CMD: CHECK | 2 | 1" marca la primera casilla de la fila 2).
-            
-            4. Para agregar una subtarea extra a una tarea ya creada: "TAREA_CMD: EXTENDER | ID_Fila"
-               (Esto agrega una casilla vacía al final de esa tarea y recalcula el porcentaje).
-            
             HERRAMIENTA TAREAS:
+
             1. Para ver tareas: "TAREA_CMD: LISTAR"
-            2. Para crear tarea (soporta hasta 15 subtareas): "TAREA_CMD: AGREGAR | Título Tarea | Subtarea 1 | Subtarea 2 | ... | Fecha"
-               (Ejemplo: "TAREA_CMD: AGREGAR | Preparar reporte | Buscar datos | Redactar | Revisar | 2025-12-07")
+            2. Para crear tarea(soporta hasta 15 subtareas): "TAREA_CMD: AGREGAR | Título Tarea | Subtarea 1 | Subtarea 2 | ... | Fecha"
+               (Ejemplo: "TAREA_CMD: AGREGAR | Informe | Buscar datos | Redactar | Revisar | 2025-12-07")
             3. Para marcar una casilla: "TAREA_CMD: CHECK | ID_Fila | N_Subtarea"
                (Ejemplo: "TAREA_CMD: CHECK | 2 | 1" marca la primera casilla de la fila 2).
             4. Para agregar una subtarea extra a una tarea ya creada: "TAREA_CMD: EXTENDER | ID_Fila"
                (Esto agrega una casilla vacía al final de esa tarea y recalcula el porcentaje).
-              
+
             2. PARA AGENDAR EN CALENDARIO:
-            CALENDAR_CMD: Título | YYYY-MM-DD HH:MM | YYYY-MM-DD HH:MM | Nota | RRULE
-            * RRULE Ejemplos: 
-              - Todos los días: FREQ=DAILY
-              - Cada mes día 5: FREQ=MONTHLY;BYMONTHDAY=5
-              - Fin de mes: FREQ=MONTHLY;BYMONTHDAY=-1
+            CALENDAR_CMD: Título | YYYY-MM-DD HH: MM | YYYY-MM-DD HH: MM | Nota | RRULE
+            * RRULE Ejemplos:
+              - Todos los días: FREQ = DAILY
+              - Cada mes día 5: FREQ = MONTHLY; BYMONTHDAY = 5
+              - Fin de mes: FREQ = MONTHLY; BYMONTHDAY = -1
 
             3. PARA GUARDAR EN MEMORIA:
             MEMORIA_CMD: Dato a guardar
@@ -719,7 +677,7 @@ if input_usuario:
 
         except Exception as e:
             respuesta_texto += f"\n\n❌ Error procesando tarea: {str(e)}"
-  
+
     # C. RESPUESTA FINAL
     with st.chat_message("assistant", avatar=avatar_bot):
         st.markdown(respuesta_texto)
@@ -746,13 +704,3 @@ if input_usuario:
                     [id_actual, timestamp, "assistant", respuesta_texto])
             except:
                 pass
-
-
-
-
-
-
-
-
-
-
